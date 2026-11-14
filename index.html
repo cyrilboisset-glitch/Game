@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Pontcharra — prototype</title>
+<style>
+html,body{margin:0;height:100%;background:#000;overflow:hidden;font-family:system-ui,sans-serif;touch-action:none}
+canvas{display:block}
+#hud{position:fixed;inset:0;pointer-events:none;color:#fff;text-shadow:0 1px 3px #000a}
+.pill{position:absolute;background:rgba(10,14,20,.55);backdrop-filter:blur(6px);padding:6px 12px;border-radius:10px;font-weight:600;font-size:14px}
+#loading{position:fixed;inset:0;background:#10151c;color:#cfd8e3;display:flex;align-items:center;justify-content:center;font-size:18px}
+</style></head><body>
+<div id="loading">Chargement de Pontcharra…</div>
+<div id="hud"><div class="pill" id="clock" style="left:14px;top:14px"></div><div class="pill" id="place" style="left:14px;top:56px"></div><div class="pill" id="speed" style="right:14px;bottom:14px;font-size:20px"></div>
+<div class="pill" id="info" style="left:14px;bottom:14px;font-size:11px;opacity:.8">ZQSD / flèches : conduire · Espace : frein à main · L : phares · H : changer l'heure</div></div>
+<script type="module" src="/src/main.ts"></script></body></html>

@@ -1,0 +1,93 @@
+import * as THREE from 'three';
+import { MeshBuilder } from './meshbuilder';
+import { CHUNK, type WorldData } from './data';
+import { addBuilding, type BuildBuilders } from './buildings';
+import { addRoadPiece, addRail, addStrip, junctions, sidewalkCuts, splitGrid, ROAD_W, PATH_TYPES, type RoadBuilders } from './roads';
+import { addTree, addLamp } from './props';
+import { area, centroid, length, pointInPoly, type Pt } from './geom';
+import { rnd } from './textures';
+import type { Materials } from './materials';
+
+interface Raw { builds: number[]; roads: { ri: number; piece: Pt[]; sBase: number }[]; rails: Pt[][]; waters: { p: Pt[]; a: number }[]; greens: { p: Pt[]; k: string }[]; }
+const ck = (cx: number, cy: number) => `${cx},${cy}`;
+const cOf = (x: number, y: number) => [Math.floor(x / CHUNK), Math.floor(y / CHUNK)];
+
+export class Chunks {
+  grid = new Map<string, Raw>(); loaded = new Map<string, THREE.Group>(); lamps: THREE.Vector3[] = [];
+  constructor(private w: WorldData, private mats: Materials, private scene: THREE.Scene) { this.index(); }
+  private raw(k: string): Raw { let r = this.grid.get(k); if (!r) { r = { builds: [], roads: [], rails: [], waters: [], greens: [] }; this.grid.set(k, r); } return r; }
+
+  private index() {
+    const w = this.w;
+    w.builds.forEach((b, i) => { const [cx, cy] = cOf(...centroid(b.p.slice(0, -1)) as [number, number]); this.raw(ck(cx, cy)).builds.push(i); });
+    const J = junctions(w.roads);
+    w.roads.forEach((r, ri) => {
+      const cuts = sidewalkCuts(r, ri, J); (r as any)._cuts = cuts; let s = 0;
+      for (const piece of splitGrid(r.p, CHUNK)) { const m = piece[Math.floor(piece.length / 2)]; const [cx, cy] = cOf((piece[0][0] + piece[piece.length - 1][0]) / 2, (piece[0][1] + piece[piece.length - 1][1]) / 2); void m; this.raw(ck(cx, cy)).roads.push({ ri, piece, sBase: s }); s += length(piece); }
+    });
+    for (const p of w.rails) for (const piece of splitGrid(p, CHUNK)) { const [cx, cy] = cOf((piece[0][0] + piece[piece.length - 1][0]) / 2, (piece[0][1] + piece[piece.length - 1][1]) / 2); this.raw(ck(cx, cy)).rails.push([...piece]); }
+    for (const wa of w.waters) { const [cx, cy] = cOf(...centroid(wa.p) as [number, number]); this.raw(ck(cx, cy)).waters.push(wa); }
+    for (const g of w.greens) { const [cx, cy] = cOf(...centroid(g.p) as [number, number]); this.raw(ck(cx, cy)).greens.push(g); }
+  }
+
+  private make(cx: number, cy: number): THREE.Group {
+    const raw = this.grid.get(ck(cx, cy)); const g = new THREE.Group(); g.name = ck(cx, cy);
+    if (!raw) return g;
+    const m = this.mats;
+    const BB: BuildBuilders = { wall: new MeshBuilder(), roof: new MeshBuilder(), flat: new MeshBuilder() };
+    const RB: RoadBuilders = { marked: new MeshBuilder(), plain: new MeshBuilder(), paving: new MeshBuilder(), gravel: new MeshBuilder() };
+    const ground = new MeshBuilder(), water = new MeshBuilder(), trees = new MeshBuilder(), leaves = new MeshBuilder(), poles = new MeshBuilder(), heads = new MeshBuilder();
+    const nearBuilds: Pt[][] = [];
+    // bâtiments voisins pour éviter d'y planter des arbres
+    for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) { const r2 = this.grid.get(ck(cx + dx, cy + dy)); if (r2) for (const bi of r2.builds) nearBuilds.push(this.w.builds[bi].p); }
+    const inBuilding = (x: number, y: number) => nearBuilds.some(p => { const q = p[0]; if (Math.abs(q[0] - x) > 60 || Math.abs(q[1] - y) > 60) return false; return pointInPoly(x, y, p); });
+    for (const bi of raw.builds) addBuilding(BB, this.w.builds[bi], bi);
+    for (const rr of raw.roads) {
+      const road = this.w.roads[rr.ri]; addRoadPiece(RB, road, rr.piece, (road as any)._cuts, rr.sBase);
+      const urban = ['primary', 'secondary', 'tertiary', 'residential', 'unclassified', 'living_street'].includes(road.t);
+      if (urban) {
+        const hw = ROAD_W[road.t] / 2 + 3.2; let acc = rnd() * 20;
+        for (let i = 0; i < rr.piece.length - 1; i++) {
+          const a = rr.piece[i], b = rr.piece[i + 1]; const l = Math.hypot(b[0] - a[0], b[1] - a[1]); const dx = (b[0] - a[0]) / l, dz = (b[1] - a[1]) / l;
+          for (let t = acc; t < l; t += 14) {
+            const x = a[0] + dx * t, z = a[1] + dz * t; const side = (Math.floor(t / 14) % 2) ? 1 : -1;
+            const px = x - dz * hw * side, pz = z + dx * hw * side;
+            if (inBuilding(px, pz)) continue;
+            const k = Math.floor(t / 14) + rr.ri;
+            if (k % 3 === 0) { addLamp(poles, heads, px, pz, -dz * side, dx * side); this.lamps.push(new THREE.Vector3(px, 7, pz)); }
+            else if (k % 3 === 1 && rnd() < 0.7) addTree(trees, leaves, px, pz, 0.8 + rnd() * 0.5);
+          }
+          acc = (acc + 1e6) % 14;
+        }
+      }
+    }
+    for (const rl of raw.rails) addRail(RB.gravel, rl);
+    for (const wa of raw.waters) {
+      if (wa.a && wa.p.length > 3) { try { const p = wa.p.slice(0, -1); const tris = THREE.ShapeUtils.triangulateShape(p.map(q => new THREE.Vector2(q[0], q[1])), []); const b = water.count; for (const q of p) water.vert(q[0], 0.02, q[1], 0, 1, 0, q[0] / 12, q[1] / 12, null); for (const t of tris) water.tri(b + t[0], b + t[2], b + t[1]); } catch { /* polygone invalide : ignoré */ } }
+      else addStrip(water, wa.p, 3, 0.02, 12);
+    }
+    for (const gr of raw.greens) {
+      const p = gr.p.slice(0, -1); if (p.length < 3) continue; const forest = gr.k === 'forest' || gr.k === 'wood' || gr.k === 'scrub';
+      try { const tris = THREE.ShapeUtils.triangulateShape(p.map(q => new THREE.Vector2(q[0], q[1])), []); const b = ground.count; const c = forest ? new THREE.Color(0.5, 0.62, 0.45) : new THREE.Color(1.05, 1.05, 0.9); for (const q of p) ground.vert(q[0], 0.012, q[1], 0, 1, 0, q[0] / 6, q[1] / 6, c); for (const t of tris) ground.tri(b + t[0], b + t[2], b + t[1]); } catch { continue; }
+      const a = Math.abs(area(p)); const n = Math.min(forest ? 70 : 14, Math.floor(a / (forest ? 90 : 700)));
+      let xs = Infinity, xe = -Infinity, ys = Infinity, ye = -Infinity; for (const q of p) { xs = Math.min(xs, q[0]); xe = Math.max(xe, q[0]); ys = Math.min(ys, q[1]); ye = Math.max(ye, q[1]); }
+      for (let k = 0, tries = 0; k < n && tries < n * 6; tries++) { const x = xs + rnd() * (xe - xs), z = ys + rnd() * (ye - ys); if (pointInPoly(x, z, p) && !inBuilding(x, z)) { addTree(trees, leaves, x, z, 0.9 + rnd() * 0.9); k++; } }
+    }
+    const add = (b: MeshBuilder, mat: THREE.Material, shadow = false, recv = true) => { const geo = b.build(); if (!geo) return; const me = new THREE.Mesh(geo, mat); me.castShadow = shadow; me.receiveShadow = recv; g.add(me); };
+    add(BB.wall, m.wall, true); add(BB.roof, m.roof, true); add(BB.flat, m.flat, true);
+    add(RB.marked, m.asphaltMarked); add(RB.plain, m.asphalt); add(RB.paving, m.pavement); add(RB.gravel, m.gravel);
+    add(ground, m.greens); add(water, m.water, false); add(trees, m.bark, true); add(leaves, m.leaves, true); add(poles, m.metal, true); add(heads, m.lampHead, false, false);
+    return g;
+  }
+
+  update(px: number, pz: number, radius: number) {
+    const [cx, cy] = cOf(px, pz); const n = Math.ceil(radius / CHUNK); const want = new Set<string>();
+    for (let dx = -n; dx <= n; dx++) for (let dy = -n; dy <= n; dy++) {
+      const x = (cx + dx + 0.5) * CHUNK, z = (cy + dy + 0.5) * CHUNK; if (Math.hypot(x - px, z - pz) > radius + CHUNK * 0.7) continue;
+      const k = ck(cx + dx, cy + dy); want.add(k);
+      if (!this.loaded.has(k)) { const g = this.make(cx + dx, cy + dy); this.scene.add(g); this.loaded.set(k, g); }
+    }
+    for (const [k, g] of this.loaded) if (!want.has(k)) { this.scene.remove(g); g.traverse(o => { if ((o as THREE.Mesh).geometry) (o as THREE.Mesh).geometry.dispose(); }); this.loaded.delete(k); }
+  }
+}
+export const _unused = { PATH_TYPES, addStrip };
