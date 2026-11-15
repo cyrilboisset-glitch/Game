@@ -211,3 +211,20 @@ export function leaf(): THREE.Texture {
   }
   const t = tex(c, true, false); t.wrapS = t.wrapT = THREE.RepeatWrapping; return t;
 }
+
+/** Sols et murs d'intérieur (1 répétition = 2 m). */
+export function floorTex(kind: 'bois' | 'carrelage' | 'beton'): PBR {
+  const W = 512; const { c, g } = canvas(W); const hc = canvas(W); hc.g.fillStyle = '#909090'; hc.g.fillRect(0, 0, W, W);
+  if (kind === 'bois') {
+    const n = 8, h = W / n; for (let i = 0; i < n; i++) { let x = 0; while (x < W) { const l = 180 + rnd() * 240, v = 0.8 + rnd() * 0.35; g.fillStyle = `rgb(${160 * v},${112 * v},${68 * v})`; g.fillRect(x, i * h, l, h - 1.5); for (let k = 0; k < 14; k++) { g.fillStyle = 'rgba(60,35,15,0.12)'; g.fillRect(x, i * h + rnd() * h, l, 1); } hc.g.fillStyle = '#202020'; hc.g.fillRect(x + l - 1, i * h, 1.5, h); x += l; } hc.g.fillStyle = '#202020'; hc.g.fillRect(0, i * h + h - 1.5, W, 1.5); }
+  } else if (kind === 'carrelage') {
+    g.fillStyle = '#8a8d90'; g.fillRect(0, 0, W, W); const n = 4, s = W / n; for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) { const v = 205 + rnd() * 22; g.fillStyle = `rgb(${v},${v},${v - 4})`; g.fillRect(x * s + 2, y * s + 2, s - 4, s - 4); hc.g.fillStyle = '#d0d0d0'; hc.g.fillRect(x * s + 2, y * s + 2, s - 4, s - 4); }
+  } else { g.fillStyle = '#74777a'; g.fillRect(0, 0, W, W); blotches(g, W, W, 90, 20, 80, 0.12); }
+  noise(g, W, W, 16); noise(hc.g, W, W, 18);
+  return { map: tex(c, true), normalMap: tex(heightToNormal(hc.c, 2), false) };
+}
+export function plaster(): PBR {
+  const W = 256; const { c, g } = canvas(W); g.fillStyle = '#f2efe9'; g.fillRect(0, 0, W, W); blotches(g, W, W, 40, 20, 70, 0.05); noise(g, W, W, 14);
+  const hc = canvas(W); hc.g.fillStyle = '#808080'; hc.g.fillRect(0, 0, W, W); noise(hc.g, W, W, 50);
+  return { map: tex(c, true), normalMap: tex(heightToNormal(hc.c, 0.8), false) };
+}

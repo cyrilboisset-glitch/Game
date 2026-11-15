@@ -9,7 +9,8 @@ export class Player {
   readonly radius = 0.4;
   async load(url: string) {
     const g = await new GLTFLoader().loadAsync(url); const m = skClone(g.scene); m.traverse(o => { const me = o as THREE.Mesh; if (me.isMesh) { me.castShadow = true; me.receiveShadow = false; (me.material as THREE.MeshStandardMaterial).envMapIntensity = 0.5; } });
-    this.root.add(m); this.mixer = new THREE.AnimationMixer(m);
+    m.rotation.y = Math.PI;   // le modèle regarde vers -Z : on le retourne pour que heading = direction de marche
+    const pivot = new THREE.Group(); pivot.add(m); this.root.add(pivot); this.mixer = new THREE.AnimationMixer(m);
     for (const c of g.animations) if (['Idle', 'Walk', 'Run'].includes(c.name)) { this.act[c.name] = this.mixer.clipAction(c); }
     this.act.Idle.play();
   }

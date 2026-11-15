@@ -31,7 +31,7 @@ const player = new Player(); await player.load(import.meta.env.BASE_URL + 'asset
 const av = world.roads.filter(r => r.n === 'Avenue de la Gare' && r.t === 'secondary').sort((a, b) => b.p.length - a.p.length)[0];
 const si = parseInt(q.get('s') ?? '2'); const a = av.p[si], b = av.p[si + 1];
 const input = new Input(renderer.domElement); const hud = new Hud(); const minimap = new Minimap(world, pois);
-const game = new Game(world, pois, car, player, input, hud, parseFloat(q.get('t') ?? '9'), { x: a[0], z: a[1], h: Math.atan2(b[0] - a[0], b[1] - a[1]) });
+const game = new Game(world, pois, car, player, input, hud, parseFloat(q.get('t') ?? '9'), { x: a[0], z: a[1], h: Math.atan2(b[0] - a[0], b[1] - a[1]) }, scene);
 if (q.has('fresh') || q.has('t')) Save.reset(); else if (game.restore()) hud.toast('Partie reprise.');
 if (q.get('mode') === 'car') { game.mode = 'car'; player.root.visible = false; }
 if (q.has('freeze')) game.clock.scale = 0;
@@ -39,6 +39,7 @@ document.getElementById('reset')?.addEventListener('click', () => { Save.reset()
 
 const camPos = new THREE.Vector3(), camLook = new THREE.Vector3(); let snap = true;
 function placeCamera(dt: number) {
+  if (game.interior.inside) { const c = game.interior.camera(); camera.position.copy(c.pos); camera.lookAt(c.look); camPos.copy(c.pos); camLook.copy(c.look); snap = true; return; }
   if (q.has('aerial')) { camera.position.set(game.pos.x - 120, 170, game.pos.z + 170); camera.lookAt(game.pos.x + 40, 0, game.pos.z - 20); return; }
   let tp: THREE.Vector3, look: THREE.Vector3;
   if (game.mode === 'car') {
@@ -62,10 +63,10 @@ document.getElementById('loading')?.remove(); (window as any).__ready = true;
 function frame(now: number) {
   const dt = Math.min(0.05, (now - last) / 1000); last = now; acc += dt;
   game.update(dt); chunks.update(game.pos.x, game.pos.z, VIEW); signs.update(game.pos.x, game.pos.z); placeCamera(dt);
-  const { night } = env.set(game.clock.hour, game.pos);
+  const { night } = env.set(game.clock.hour, game.pos); if (game.interior.inside) renderer.toneMappingExposure = 0.95;
   if (night > 0.2 && !car.lightsOn && !car.headlights[0].intensity) car.setLights(true); if (night <= 0.2 && car.lightsOn) car.setLights(false);
   if (night > 0.2) { const near = chunks.lamps.filter(l => Math.hypot(l.x - game.pos.x, l.z - game.pos.z) < 90).sort((p, q2) => p.distanceToSquared(game.pos) - q2.distanceToSquared(game.pos)); lampLights.forEach((l, i) => { const p = near[i]; l.intensity = p ? 450 : 0; if (p) l.position.set(p.x, 6.6, p.z); }); } else lampLights.forEach(l => (l.intensity = 0));
-  renderer.render(scene, camera);
+  renderer.render(game.interior.inside ? game.interior.scene! : scene, camera);
   frames++; fpsT += dt; if (fpsT > 0.5) { fps = Math.round(frames / fpsT); frames = 0; fpsT = 0; }
   hud.update(game.needs, game.heat, game.money, game.inv, game.clock.label, game.clock.day);
   minimap.draw(game.pos.x, game.pos.z, game.mode === 'car' ? car.heading : player.heading, now);

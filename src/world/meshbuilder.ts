@@ -18,6 +18,16 @@ export class MeshBuilder {
     const i = p.map((q, k) => this.vert(q[0], q[1], q[2], nx, ny, nz, uvs[k][0], uvs[k][1], c));
     this.quad(i[0], i[1], i[2], i[3]);
   }
+  /** Boîte alignée sur les axes (centre x,z ; base y), UV en mètres/2 pour des textures répétées. */
+  box(cx: number, cz: number, w: number, d: number, h: number, y0: number, c: THREE.Color) {
+    const x0 = cx - w / 2, x1 = cx + w / 2, z0 = cz - d / 2, z1 = cz + d / 2, y1 = y0 + h; const k = 0.5;
+    const P = (x: number, y: number, z: number) => [x, y, z];
+    this.planar([P(x0, y0, z1), P(x1, y0, z1), P(x1, y1, z1), P(x0, y1, z1)], [[x0 * k, y0 * k], [x1 * k, y0 * k], [x1 * k, y1 * k], [x0 * k, y1 * k]], c);
+    this.planar([P(x1, y0, z0), P(x0, y0, z0), P(x0, y1, z0), P(x1, y1, z0)], [[x1 * k, y0 * k], [x0 * k, y0 * k], [x0 * k, y1 * k], [x1 * k, y1 * k]], c);
+    this.planar([P(x1, y0, z1), P(x1, y0, z0), P(x1, y1, z0), P(x1, y1, z1)], [[z1 * k, y0 * k], [z0 * k, y0 * k], [z0 * k, y1 * k], [z1 * k, y1 * k]], c);
+    this.planar([P(x0, y0, z0), P(x0, y0, z1), P(x0, y1, z1), P(x0, y1, z0)], [[z0 * k, y0 * k], [z1 * k, y0 * k], [z1 * k, y1 * k], [z0 * k, y1 * k]], c);
+    this.planar([P(x0, y1, z1), P(x1, y1, z1), P(x1, y1, z0), P(x0, y1, z0)], [[x0 * k, z1 * k], [x1 * k, z1 * k], [x1 * k, z0 * k], [x0 * k, z0 * k]], c);
+  }
   build(): THREE.BufferGeometry | null {
     if (!this.idx.length) return null;
     const g = new THREE.BufferGeometry();

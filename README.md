@@ -11,3 +11,9 @@ Mobile : joystick gauche, boutons à droite, glisser sur la moitié droite pour 
 Besoins : faim, soif, énergie, vessie, santé (src/survival/needs.ts). « Recherche » : src/survival/heat.ts. Horloge : 20 min réelles = 24 h.
 Tests : `npm test` (logique pure) · `node tools/play.cjs <dossier>` (scénario Playwright, nécessite `npm run dev` et CHROME_BIN).
 Hypothèses : horaires par défaut des commerces quand opening_hours est absent (src/world/poi.ts) ; le jour 1 est un mercredi.
+
+## Intérieurs (phase 3)
+Tous les bâtiments sont accessibles : E près d'un mur → entrer (ouvert), ou forcer la porte (fermé/verrouillé : recherche +, alarme possible). Les écoles ne sont jamais cambriolées (fermées hors horaires, aucune interaction criminelle).
+Intérieur généré à la demande par type de lieu (src/interiors/generator.ts, déterministe par graine) ; ce n'est PAS une reproduction du lieu réel, et le jeu l'annonce.
+Interactions : acheter, prendre, manger, boire, fouiller, dormir, toilettes, robinet, coffre. Tests : `npm test`, scénario : `node tools/interiors.cjs <dossier>`.
+Limites : un seul niveau par bâtiment, meubles en volumes simples, pas d'occupants (PNJ) pour l'instant.
