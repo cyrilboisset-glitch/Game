@@ -6,6 +6,7 @@ import { Chunks } from './world/chunks';
 import { Environment } from './world/environment';
 import { Car } from './vehicles/car';
 import { Player } from './player/player';
+import { AvatarFactory } from './player/avatar';
 import { Game } from './game';
 import { Input } from './ui/input';
 import { Hud } from './ui/hud';
@@ -26,7 +27,8 @@ addEventListener('resize', () => { renderer.setSize(innerWidth, innerHeight); ca
 const [world, pois] = await Promise.all([loadWorld(), loadPoi()]);
 const chunks = new Chunks(world, mats, scene); const signs = new Signs(pois, scene);
 const car = new Car(); await car.load(import.meta.env.BASE_URL + 'assets/car.glb'); scene.add(car.root);
-const player = new Player(); await player.load(import.meta.env.BASE_URL + 'assets/citizen.glb', import.meta.env.BASE_URL + 'assets/anims.glb'); scene.add(player.root);
+const avatars = new AvatarFactory(); await avatars.load(import.meta.env.BASE_URL + 'assets/citizen.glb', import.meta.env.BASE_URL + 'assets/anims.glb');
+const player = new Player(); player.attach(avatars); scene.add(player.root);
 
 const av = world.roads.filter(r => r.n === 'Avenue de la Gare' && r.t === 'secondary').sort((a, b) => b.p.length - a.p.length)[0];
 const si = parseInt(q.get('s') ?? '2'); const a = av.p[si], b = av.p[si + 1];

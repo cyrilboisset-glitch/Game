@@ -1,12 +1,13 @@
 <!doctype html><meta charset="utf-8"><body style="margin:0"><script type="module">
 import * as THREE from 'three';
 import { Player } from '/src/player/player.ts';
+import { AvatarFactory } from '/src/player/avatar.ts';
 const r = new THREE.WebGLRenderer({ antialias: true }); r.setSize(600, 500); document.body.appendChild(r.domElement);
 const s = new THREE.Scene(); s.background = new THREE.Color(0x889aaa); s.add(new THREE.HemisphereLight(0xffffff, 0x445544, 2), new THREE.DirectionalLight(0xffffff, 2));
 const cam = new THREE.PerspectiveCamera(40, 600 / 500, 0.1, 100); cam.position.set(0, 1.2, 4.5); cam.lookAt(0, 0.9, 0);
-const P = new Player(); await P.load('/assets/citizen.glb', '/assets/anims.glb'); s.add(P.root);
+const F = new AvatarFactory(); await F.load('/assets/citizen.glb', '/assets/anims.glb'); const P = new Player(); P.attach(F); s.add(P.root);
 const mode = new URLSearchParams(location.search).get('m') || 'idle';
 for (let i = 0; i < 40; i++) P.update(1 / 30, 0, (mode === 'idle' || mode === 'front') ? 0 : 1, Math.PI, mode === 'run', 1);
 P.root.position.set(0, 0, 0); P.root.rotation.y = mode === 'front' ? 0 : Math.PI;   // face caméra pour voir le visage ? non : dos
-const h=P.root.getObjectByName('Hips'),sp=P.root.getObjectByName('Spine'),lu=P.root.getObjectByName('LeftUpLeg');h.updateWorldMatrix(true,false);const up=new THREE.Vector3(0,1,0).applyQuaternion(h.getWorldQuaternion(new THREE.Quaternion()));const ms=[];P.root.traverse(o=>{if(o.isSkinnedMesh)ms.push([o.name,o.visible,o.material.name,o.material.transparent,o.material.opacity,o.material.alphaTest,!!o.material.map,o.material.side,o.material.color.getHexString()])});window.__info=JSON.stringify({ms,hipsQ:h.quaternion.toArray().map(v=>+v.toFixed(3)),hipsUp:up.toArray().map(v=>+v.toFixed(2)),hipsPos:h.position.toArray().map(v=>+v.toFixed(2)),restTrack:P.act.Walk.getClip().tracks.filter(t=>t.name.startsWith('Hips')).map(t=>[t.name,Array.from(t.values.slice(0,4)).map(v=>+v.toFixed(3))])});r.render(s, cam); window.__done = true;
+r.render(s, cam); window.__done = true;
 </script>

@@ -13,6 +13,14 @@ export function retargetClips(srcRoot: THREE.Object3D, clips: THREE.AnimationCli
   const wq = (o: THREE.Object3D) => o.getWorldQuaternion(new THREE.Quaternion());
   const srcRest = new Map<string, THREE.Quaternion>(); srcBones.forEach((b, n) => srcRest.set(n, wq(b)));
   const tgtRest = new Map<string, THREE.Quaternion>(); tgtBones.forEach(b => tgtRest.set(b.name, wq(b)));
+  // Les deux squelettes n'ont pas la même pose de repos (ex. bras : T pour la source, A pour la cible) : pour chaque os on calcule la
+  // rotation Q qui ramène la direction de l'os cible sur celle de l'os source, afin que les bras finissent au même endroit et pas « tournés de plus ».
+  const Q = new Map<string, THREE.Quaternion>(); const dirTo = (a: THREE.Object3D, b: THREE.Object3D) => b.getWorldPosition(new THREE.Vector3()).sub(a.getWorldPosition(new THREE.Vector3())).normalize();
+  for (const b of tgtBones) {
+    const child = b.children.find(c => (c as THREE.Bone).isBone && srcBones.has(c.name)); const sb = srcBones.get(b.name);
+    if (child && sb) { const sc = srcBones.get(child.name)!; Q.set(b.name, new THREE.Quaternion().setFromUnitVectors(dirTo(b, child), dirTo(sb, sc))); }
+    else Q.set(b.name, (b.parent && Q.get(b.parent.name)) ? Q.get(b.parent.name)!.clone() : new THREE.Quaternion());
+  }
   const tgtLocalRest = new Map<string, THREE.Quaternion>(); tgtBones.forEach(b => tgtLocalRest.set(b.name, b.quaternion.clone()));
   const hipsS = srcBones.get('Hips')!, hipsT = tgtBones.find(b => b.name === 'Hips')!;
   const ratio = hipsT.getWorldPosition(new THREE.Vector3()).y / hipsS.getWorldPosition(new THREE.Vector3()).y;
@@ -29,7 +37,7 @@ export function retargetClips(srcRoot: THREE.Object3D, clips: THREE.AnimationCli
       for (const b of tgtBones) {
         const s = srcBones.get(b.name); let world: THREE.Quaternion;
         const parentIsBone = (b.parent as THREE.Bone | null)?.isBone; const pw = parentIsBone ? cur.get(b.parent!.name)! : wq(b.parent!);
-        if (s) { world = wq(s).multiply(inv.copy(srcRest.get(b.name)!).invert()).multiply(tgtRest.get(b.name)!); }
+        if (s) { world = wq(s).multiply(inv.copy(srcRest.get(b.name)!).invert()).multiply(Q.get(b.name)!).multiply(tgtRest.get(b.name)!); }
         else { world = pw.clone().multiply(tgtLocalRest.get(b.name)!); }
         cur.set(b.name, world.clone());
         tmp.copy(pw).invert().multiply(world); rot.get(b.name)!.push(tmp.x, tmp.y, tmp.z, tmp.w);
