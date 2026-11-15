@@ -2,20 +2,22 @@ import * as THREE from 'three';
 import type { AvatarFactory, AvatarInstance } from '../player/avatar';
 import type { Npc } from './identity';
 import type { NpcState } from './sim';
+import { SKIN_DISPLAY } from './appearance';
 
-const MAX_PED = 160, MAX_CAR = 40, AVATARS = 5, AVATAR_RANGE = 22;
-const SKIN = [0xf1c9a5, 0xe0ac86, 0xc68642, 0x8d5524, 0xffdbac, 0xd9a066].map(c => new THREE.Color(c));
+const MAX_PED = 450, MAX_CAR = 40, AVATARS = 5, AVATAR_RANGE = 22;
+const SKIN = SKIN_DISPLAY.map(c => new THREE.Color(c));
 const box = (w: number, h: number, d: number, y: number) => new THREE.BoxGeometry(w, h, d).translate(0, y, 0);
 
 /** Rendu des habitants : silhouettes instanciées (6 draw calls pour tous), avatars complets animés pour les plus proches et le PNJ observé. */
 export class NpcRenderer {
-  private parts: { mesh: THREE.InstancedMesh; px: number; py: number; pz: number; kind: 'torse' | 'jambeG' | 'jambeD' | 'brasG' | 'brasD' | 'tete' }[] = [];
-  private cars: THREE.InstancedMesh[] = []; private avatars = new Map<number, { av: AvatarInstance; t: number }>(); private dummy = new THREE.Matrix4(); private q = new THREE.Quaternion(); private qx = new THREE.Quaternion(); private v = new THREE.Vector3(); private one = new THREE.Vector3(1, 1, 1);
+  private parts: { mesh: THREE.InstancedMesh; px: number; py: number; pz: number; kind: 'torse' | 'jambeG' | 'jambeD' | 'brasG' | 'brasD' | 'tete' | 'cheveux' | 'jupe' }[] = [];
+  private cars: THREE.InstancedMesh[] = []; private avatars = new Map<number, { av: AvatarInstance; t: number }>(); private dummy = new THREE.Matrix4(); private q = new THREE.Quaternion(); private qx = new THREE.Quaternion(); private v = new THREE.Vector3(); private one = new THREE.Vector3(1, 1, 1); private zero = new THREE.Vector3(0.0001, 0.0001, 0.0001); private sc = new THREE.Vector3();
   visible: { id: number; x: number; z: number; head: number }[] = [];
   constructor(private scene: THREE.Scene, private factory: AvatarFactory, private npcById: Map<number, Npc>) {
     const mk = (geo: THREE.BufferGeometry, px: number, py: number, pz: number, kind: any) => { const m = new THREE.InstancedMesh(geo, new THREE.MeshStandardMaterial({ roughness: 0.9 }), MAX_PED); m.count = 0; m.castShadow = true; m.frustumCulled = false; m.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(MAX_PED * 3), 3); scene.add(m); this.parts.push({ mesh: m, px, py, pz, kind }); };
     mk(box(0.46, 0.6, 0.26, 0.3).translate(0, 1.2, 0), 0, 0, 0, 'torse'); mk(box(0.19, 0.86, 0.2, -0.43), -0.12, 0.9, 0, 'jambeG'); mk(box(0.19, 0.86, 0.2, -0.43), 0.12, 0.9, 0, 'jambeD');
     mk(box(0.13, 0.6, 0.14, -0.28), -0.32, 1.48, 0, 'brasG'); mk(box(0.13, 0.6, 0.14, -0.28), 0.32, 1.48, 0, 'brasD'); mk(new THREE.SphereGeometry(0.115, 10, 8).translate(0, 1.67, 0), 0, 0, 0, 'tete');
+    mk(new THREE.SphereGeometry(0.125, 10, 6, 0, Math.PI * 2, 0, Math.PI * 0.55).translate(0, 1.69, -0.005), 0, 0, 0, 'cheveux'); mk(new THREE.CylinderGeometry(0.2, 0.3, 0.46, 10, 1, true).translate(0, 0.72, 0), 0, 0, 0, 'jupe');
     for (const [g, y] of [[new THREE.BoxGeometry(1.8, 0.7, 4.2).translate(0, 0.75, 0), 0], [new THREE.BoxGeometry(1.6, 0.6, 2.1).translate(0, 1.4, -0.2), 0]] as const) { void y; const m = new THREE.InstancedMesh(g, new THREE.MeshStandardMaterial({ roughness: 0.4, metalness: 0.4 }), MAX_CAR); m.count = 0; m.castShadow = true; m.frustumCulled = false; m.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(MAX_CAR * 3), 3); scene.add(m); this.cars.push(m); }
   }
   update(dt: number, states: NpcState[], fx: number, fz: number, selectedId: number | null, now: number, timeScale = 1) {
@@ -28,16 +30,18 @@ export class NpcRenderer {
       const n = this.npcById.get(s.id)!; this.visible.push({ id: s.id, x: s.x, z: s.z, head: s.kind === 'conduit' ? 1.3 : 1.7 });
       if (s.kind === 'conduit') { if (car < MAX_CAR) { this.q.setFromAxisAngle(this.v.set(0, 1, 0), s.h); for (const m of this.cars) { this.dummy.compose(this.v.set(s.x, 0, s.z), this.q, this.one); m.setMatrixAt(car, this.dummy); m.setColorAt(car, new THREE.Color().setHSL((n.seed % 360) / 360, 0.5, 0.45)); } car++; } continue; }
       if (wantAvatar.has(s.id)) {
-        let a = this.avatars.get(s.id); if (!a) { a = { av: this.factory.create(n.outfit, n.genre === 'F' ? 1.66 : 1.78), t: 0 }; this.scene.add(a.av.root); this.avatars.set(s.id, a); }
+        let a = this.avatars.get(s.id); if (!a) { a = { av: this.factory.create(n.outfit, n.look), t: 0 }; this.scene.add(a.av.root); this.avatars.set(s.id, a); }
         a.av.root.position.set(s.x, 0, s.z); a.av.root.rotation.y = s.h; const sp = s.kind === 'dehors' ? 0.9 : Math.min(s.speed * Math.min(timeScale, 4), 6.5); a.av.set(sp > 3.5 ? 'Run' : sp > 0.4 ? 'Walk' : 'Idle', sp); a.av.update(dt); continue;
       }
       if (ped >= MAX_PED) continue; const phase = now * 0.0075 * Math.max(0.8, Math.min(s.speed * Math.min(timeScale, 4), 6.5)) + n.seed; const sw = Math.sin(phase) * (s.speed > 0.3 ? 0.55 : 0); const bob = Math.abs(Math.cos(phase)) * 0.025 * (s.speed > 0.3 ? 1 : 0);
       this.q.setFromAxisAngle(this.v.set(0, 1, 0), s.h); const base = new THREE.Matrix4().compose(this.v.set(s.x, bob, s.z), this.q, this.one);
-      const hoodie = new THREE.Color(n.outfit.hoodie), jeans = new THREE.Color(n.outfit.jeans), skin = SKIN[n.seed % SKIN.length];
+      const hoodie = new THREE.Color(n.outfit.hoodie), jeans = new THREE.Color(n.outfit.jeans), skin = SKIN[n.look.skin], hair = new THREE.Color(n.look.hairColor);
+      const hs = n.look.height / 1.75, ws = n.look.width; this.sc.set(ws, hs, ws * 0.92); base.scale(this.sc);
       for (const p of this.parts) {
+        const hide = (p.kind === 'cheveux' && n.look.hairStyle === 'chauve') || (p.kind === 'jupe' && !n.look.skirt);
         const ang = p.kind === 'jambeG' || p.kind === 'brasD' ? sw : p.kind === 'jambeD' || p.kind === 'brasG' ? -sw : 0; this.qx.setFromAxisAngle(this.v.set(1, 0, 0), ang);
-        this.dummy.compose(this.v.set(p.px, p.py, p.pz), this.qx, this.one); this.dummy.premultiply(base); p.mesh.setMatrixAt(ped, this.dummy);
-        p.mesh.setColorAt(ped, p.kind.startsWith('jambe') ? jeans : p.kind === 'tete' ? skin : hoodie);
+        this.dummy.compose(this.v.set(p.px, p.py, p.pz), this.qx, hide ? this.zero : this.one); this.dummy.premultiply(base); p.mesh.setMatrixAt(ped, this.dummy);
+        p.mesh.setColorAt(ped, p.kind.startsWith('jambe') ? jeans : p.kind === 'tete' ? skin : p.kind === 'cheveux' ? hair : p.kind === 'jupe' ? jeans : hoodie);
       }
       ped++;
     }

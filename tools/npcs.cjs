@@ -4,7 +4,7 @@ const step = (p, n) => p.evaluate(`(()=>{const G=window.__game.game;for(let i=0;
 (async () => {
   const b = await chromium.launch({ executablePath: process.env.CHROME_BIN, args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
   const p = await b.newPage({ viewport: { width: 1100, height: 650 } }); p.on('pageerror', e => console.log('PAGEERR', e.message)); p.on('console', m => { if (m.type() === 'error') console.log('ERR', m.text().slice(0, 200)); });
-  const t0 = Date.now(); await p.goto('http://127.0.0.1:5199/?t=8&freeze&s=3&r=200&fresh'); await p.waitForFunction('window.__ready', null, { timeout: 150000 }); console.log('chargement (s):', (Date.now() - t0) / 1000);
+  const t0 = Date.now(); await p.goto('http://127.0.0.1:5199/?t=8&freeze&s=3&r=200&fresh&npc=4000'); await p.waitForFunction('window.__ready', null, { timeout: 150000 }); console.log('chargement (s):', (Date.now() - t0) / 1000);
   console.log(await p.evaluate(`(()=>{const G=window.__game.game;const ns=[...G.npcs.values()];const c={};ns.forEach(n=>c[n.metier]=(c[n.metier]||0)+1);return JSON.stringify({total:ns.length,mineurs:ns.filter(n=>n.minor).length,avecVoiture:ns.filter(n=>n.hasCar).length,metiers:c})})()`));
   for (const h of [3, 8, 12.5, 18, 21]) {
     const r = await p.evaluate(`(()=>{const G=window.__game.game;G.clock.hour=${h};G.clock.scale=0;const ns=[...G.npcs.values()];const k={dedans:0,marche:0,conduit:0,dehors:0,absent:0};ns.forEach(n=>{const s=G.sim.stateAt(n,G.clock.day,${h},false);k[s.kind]++});return JSON.stringify(k)})()`); console.log(h + ' h', r);

@@ -43,7 +43,7 @@ if (q.has('fresh') || q.has('t')) Save.reset(); else if (game.restore()) hud.toa
 if (q.get('mode') === 'car') { game.mode = 'car'; player.root.visible = false; }
 if (q.has('freeze')) game.clock.scale = 0;
 // habitants
-const graph = new RoadGraph(world.roads); const NPC_COUNT = +(q.get('npc') ?? 600);
+const graph = new RoadGraph(world.roads); const NPC_COUNT = +(q.get('npc') ?? 4000);
 const npcs = buildPopulation(world, pois, game.interior.index, graph, addrs, { x: a[0], z: a[1] }, NPC_COUNT);
 const sim = new NpcSim(npcs, graph); game.attachNpcs(npcs, sim); const npcRender = new NpcRenderer(scene, avatars, game.npcs); const panel = new ObservePanel();
 panel.onQuit = () => { game.stopObserving(); panel.show(false); }; panel.onSpeed = x => game.setSpeed(x);
@@ -51,14 +51,15 @@ let down: { x: number; y: number; t: number } | null = null;
 renderer.domElement.addEventListener('pointerdown', e => { down = { x: e.clientX, y: e.clientY, t: performance.now() }; });
 renderer.domElement.addEventListener('pointerup', e => { if (!down) return; const moved = Math.hypot(e.clientX - down.x, e.clientY - down.y), dt = performance.now() - down.t; down = null; if (moved < 9 && dt < 400 && !game.interior.inside) { const id = npcRender.pick(e.clientX, e.clientY, camera, innerWidth, innerHeight); if (id !== null) { game.observe(id); panel.show(true); } } });
 addEventListener('keydown', e => { if (e.code === 'KeyO' && !game.observed) { const v = npcRender.visible[0]; if (v) { game.observe(v.id); panel.show(true); } } });
-let lastSim = -1;
+let lastSim = -1; const statesArr: any[] = []; let statesMs = 0;
 function updateStates(now: number, fx: number, fz: number) {
-  if (now - lastSim < 300) return; lastSim = now; const day = game.clock.day, hour = game.clock.hour;
+  if (now - lastSim < 300) return; lastSim = now; const t0 = performance.now(); statesArr.length = 0; const day = game.clock.day, hour = game.clock.hour;
   for (const n of npcs) {
     let s = sim.stateAt(n, day, hour, false); const sel = game.observed?.id === n.id; const prev = game.states.get(n.id) ?? s;
     if (sel || Math.hypot(prev.x - fx, prev.z - fz) < 330 || Math.hypot(s.x - fx, s.z - fz) < 330) s = sim.stateAt(n, day, hour, true);
-    game.states.set(n.id, s);
+    game.states.set(n.id, s); statesArr.push(s);
   }
+  statesMs = performance.now() - t0;
 }
 document.getElementById('reset')?.addEventListener('click', () => { Save.reset(); location.reload(); });
 
@@ -84,13 +85,13 @@ const lampLights: THREE.PointLight[] = []; for (let i = 0; i < 6; i++) { const l
 let acc = 0, last = performance.now(), frames = 0, fpsT = 0, fps = 0;
 chunks.update(game.pos.x, game.pos.z, VIEW); placeCamera(0);
 document.getElementById('loading')?.remove(); (window as any).__ready = true;
-(window as any).__game = { npcRender, npcStats: () => npcRender.stats(), sync: () => { chunks.update(game.pos.x, game.pos.z, VIEW); signs.update(game.pos.x, game.pos.z); snap = true; placeCamera(0); }, game, car, player, camera, renderer, stats: () => ({ fps, calls: renderer.info.render.calls, tris: renderer.info.render.triangles, chunks: chunks.loaded.size }) };
+(window as any).__game = { npcRender, npcStats: () => ({ ...npcRender.stats(), habitants: npcs.length, majEtatsMs: +statesMs.toFixed(1) }), sync: () => { chunks.update(game.pos.x, game.pos.z, VIEW); signs.update(game.pos.x, game.pos.z); snap = true; placeCamera(0); }, game, car, player, camera, renderer, stats: () => ({ fps, calls: renderer.info.render.calls, tris: renderer.info.render.triangles, chunks: chunks.loaded.size }) };
 
 function frame(now: number) {
   const dt = Math.min(0.05, (now - last) / 1000); last = now; acc += dt;
   game.update(dt); const os = game.observed ? game.states.get(game.observed.id) : null; const fx = os ? os.x : game.pos.x, fz = os ? os.z : game.pos.z;
   chunks.update(fx, fz, VIEW); signs.update(fx, fz); updateStates(now, fx, fz); placeCamera(dt);
-  if (!game.interior.inside) npcRender.update(dt, [...game.states.values()], fx, fz, game.observed?.id ?? null, now, game.clock.scale); if (game.observed && os) panel.update(game.observed, os, sim, game.clock.day, game.clock.hour, now, game.clock.scale); else if (panel.el.style.display !== 'none') panel.show(false);
+  if (!game.interior.inside) npcRender.update(dt, statesArr, fx, fz, game.observed?.id ?? null, now, game.clock.scale); if (game.observed && os) panel.update(game.observed, os, sim, game.clock.day, game.clock.hour, now, game.clock.scale); else if (panel.el.style.display !== 'none') panel.show(false);
   const { night } = env.set(game.clock.hour, os ? new THREE.Vector3(os.x, 0, os.z) : game.pos); if (game.interior.inside) renderer.toneMappingExposure = 0.95;
   if (night > 0.2 && !car.lightsOn && !car.headlights[0].intensity) car.setLights(true); if (night <= 0.2 && car.lightsOn) car.setLights(false);
   if (night > 0.2) { const near = chunks.lamps.filter(l => Math.hypot(l.x - game.pos.x, l.z - game.pos.z) < 90).sort((p, q2) => p.distanceToSquared(game.pos) - q2.distanceToSquared(game.pos)); lampLights.forEach((l, i) => { const p = near[i]; l.intensity = p ? 450 : 0; if (p) l.position.set(p.x, 6.6, p.z); }); } else lampLights.forEach(l => (l.intensity = 0));

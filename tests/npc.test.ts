@@ -22,3 +22,17 @@ describe('Emplois du temps', () => {
   it('le week-end diffère de la semaine', () => { const n = npcs.find(x => x.metier === 'vendeur' || x.metier === 'ouvrier')!; expect(dayPlan(n, 6, 1).some(s => s.act === 'travail' || s.act === 'hors_carte')).toBe(false); expect(dayPlan(n, 1, 2).some(s => s.act === 'travail' || s.act === 'hors_carte')).toBe(true); });
   it('les élèves ne vont qu\'à l\'école, chez eux ou au parc (jamais au restaurant)', () => { for (const e of npcs.filter(n => n.metier === 'eleve').slice(0, 30)) for (const dow of [0, 2, 5]) for (const s of dayPlan(e, dow, 4)) expect(['sommeil', 'maison', 'ecole', 'dejeuner', 'courses', 'loisir']).toContain(s.act); });
 });
+
+import { SKIN_TINTS, makeLook, pickOrigin } from '../src/npc/appearance';
+import { rng } from '../src/interiors/generator';
+describe('Diversité', () => {
+  const big = generatePopulation({ homes: Array.from({ length: 1700 }, (_, i) => P('M' + i, i, 5, 'maison')), poiByType: () => [P('L', 1, 1, 'travail')], park: [P('Parc', 50, 50, 'parc')], shops: [P('S', 8, 0)], restos: [P('R', 9, 0, 'resto')], addressOf: () => 'x', count: 4000, seed: 11 });
+  it('génère 4000 habitants', () => { expect(big.length).toBe(4000); });
+  it('couvre toutes les carnations, plusieurs origines et les deux genres', () => { expect(new Set(big.map(n => n.look.skin)).size).toBe(SKIN_TINTS.length); expect(new Set(big.map(n => n.look.origin)).size).toBeGreaterThanOrEqual(5); expect(big.filter(n => n.genre === 'F').length).toBeGreaterThan(1500); });
+  it('couvre les âges : enfants, adultes, personnes âgées', () => { expect(big.some(n => n.age < 12)).toBe(true); expect(big.filter(n => n.age >= 70).length).toBeGreaterThan(100); expect(big.filter(n => n.age < 18).length).toBeGreaterThan(400); });
+  it('les enfants sont plus petits, les personnes âgées voûtées', () => { const kids = big.filter(n => n.age < 10), adults = big.filter(n => n.age >= 25 && n.age < 60); const avg = (a: typeof big) => a.reduce((s, n) => s + n.look.height, 0) / a.length; expect(avg(kids)).toBeLessThan(avg(adults) - 0.4); expect(big.filter(n => n.age >= 75).every(n => n.look.stoop > 0.1)).toBe(true); });
+  it('couvre des corpulences très différentes', () => { const w = big.map(n => n.look.width); expect(Math.min(...w)).toBeLessThan(0.92); expect(Math.max(...w)).toBeGreaterThan(1.25); });
+  it('les membres d\'un même foyer partagent leur nom de famille et leur adresse', () => { const byHome = new Map<string, Set<string>>(); for (const n of big) { const k = n.home.nom; const s = byHome.get(k) ?? new Set(); s.add(n.nom); byHome.set(k, s); } expect([...byHome.values()].every(s => s.size === 1)).toBe(true); });
+  it('les mineurs ne sont jamais au restaurant', () => { for (const n of big.filter(x => x.minor).slice(0, 200)) for (const s of dayPlan(n, 1, 2)) expect(s.place.kind).not.toBe('resto'); });
+  it('une origine tirée au hasard est valide', () => { const r = rng(1); for (let i = 0; i < 50; i++) expect(makeLook(r, pickOrigin(r), 'F', 30).height).toBeGreaterThan(1.5); });
+});
