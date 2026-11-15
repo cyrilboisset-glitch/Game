@@ -32,3 +32,9 @@ Diversité (src/npc/appearance.ts) : origines (noms, carnation 6 teintes, cheveu
 Circulation : voitures sur le graphe routier (sens uniques, limites de vitesse, distance de sécurité, un véhicule à la fois par carrefour), uniquement autour du joueur ; 2 patrouilles de gendarmerie (gyrophares). Voitures des PNJ avec les mêmes modèles.
 Dégâts (chocs contre bâtiments et véhicules, fumée à partir de 45 % de dégâts, moteur en panne à 0), garage (G près d'un atelier/station : réparation puis amélioration du moteur jusqu'au niveau 3). Paramètres d'URL : `?trafic=N`, `?parked=N`.
 Limites : pas de collision avec les piétons, pas de feux tricolores, circulation encore lente dans les carrefours, modèles stylisés (pas photoréalistes).
+
+## Effets de conduite et gendarmerie (phase 6)
+Effets : traces de pneus au sol et fumée de pneus (frein à main, gros freinage, dérapage), étincelles et secousse de caméra aux chocs, faisceaux de phares la nuit, feux de stop plus vifs, champ de vision dynamique avec la vitesse, liseré rouge/bleu clignotant quand on est recherché.
+Gendarmerie (src/police/) : un délit n'est compté qu'en proportion de ce qui est vu (gendarmerie à portée 100 %, témoin 60 %, personne 25 %). De 1 à 5 étoiles : 1, 2, 4, 6, 8 unités à la poursuite (itinéraire A* puis poursuite directe de près, fourgons à partir de 4 étoiles), barrages à partir de 3 étoiles (1, 2, 3), les patrouilles de la circulation rejoignent la poursuite. Excès de vitesse devant une patrouille, percussion d'un véhicule de gendarmerie = délit.
+Arrestation : rester presque immobile à moins de 7 m d'une unité pendant 2,5 s → amende (100 € + 80 € par étoile, au plus tout l'argent), marchandise (inventaire) saisie, retour devant la gendarmerie, 3 h perdues. Pas de mort. Fuite : la recherche ne baisse qu'après 20 s sans être vu.
+Limites : pas de gendarmes à pied ni d'hélicoptère, pas de sirènes sonores (audio en phase 8), les unités ne gèrent pas les poursuites hors route.

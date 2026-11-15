@@ -8,6 +8,8 @@ import { Car } from './vehicles/car';
 import { VehicleWorld, VehicleRenderer } from './vehicles/world';
 import { Traffic } from './vehicles/traffic';
 import { Smoke } from './vehicles/smoke';
+import { Effects } from './vehicles/effects';
+import { Police } from './police/police';
 import { SPECS, CIVIL_TYPES, PAINTS } from './vehicles/specs';
 import { Player } from './player/player';
 import { AvatarFactory } from './player/avatar';
@@ -49,7 +51,8 @@ const graph = new RoadGraph(world.roads);
 const vworld = new VehicleWorld(); vworld.populateParked(world.roads, game.coll, { x: a[0], z: a[1] }, 2600, +(q.get('parked') ?? 380));
 for (const [t, dx, dz] of [['gendarmerie_berline', 0, 0], ['gendarmerie_berline', 6, 2], ['gendarmerie_fourgon', 12, 4]] as const) { const gx = -848 + dx, gz = -89 + dz; vworld.add({ type: t, paint: 0xf2f2f2, hp: SPECS[t].hp, x: gx, z: gz, h: 1.57, speed: 0, kind: 'gare', mine: false, upgrade: 0, stun: 0 }); }
 const traffic = new Traffic(graph, vworld, +(q.get('trafic') ?? 40), 2); const smoke = new Smoke(scene); const vrender = new VehicleRenderer(scene, 140);
-game.attachVehicles(vworld, traffic, smoke);
+game.attachVehicles(vworld, traffic, smoke, new Smoke(scene, 60), new Effects(scene));
+const police = new Police(graph, vworld, traffic, game.coll); game.attachPolice(police);
 if (q.has('fresh') || q.has('t')) Save.reset(); else if (game.restore()) hud.toast('Partie reprise.');
 if (q.get('mode') === 'car') { game.mode = 'car'; player.root.visible = false; }
 // habitants
@@ -89,13 +92,15 @@ function placeCamera(dt: number) {
   }
   if (snap) { camPos.copy(tp); camLook.copy(look); snap = false; } else { const k = game.mode === 'car' ? 5 : 14; camPos.lerp(tp, 1 - Math.exp(-dt * k)); camLook.lerp(look, 1 - Math.exp(-dt * 12)); }
   camera.position.copy(camPos); camera.lookAt(camLook);
+  const sh = game.fx?.shake ?? 0; if (sh > 0) camera.position.add(new THREE.Vector3((Math.random() - 0.5) * sh * 0.5, (Math.random() - 0.5) * sh * 0.4, (Math.random() - 0.5) * sh * 0.5));
+  const fov = 62 + (game.mode === 'car' ? Math.min(14, Math.abs(car.speed) * 0.32) : 0) + (game.mode === 'foot' && player.speed > 3.6 ? 3 : 0); if (Math.abs(camera.fov - fov) > 0.05) { camera.fov += (fov - camera.fov) * 0.1; camera.updateProjectionMatrix(); }
 }
 
 const lampLights: THREE.PointLight[] = []; for (let i = 0; i < 6; i++) { const l = new THREE.PointLight(0xffd6a0, 0, 28, 1.6); scene.add(l); lampLights.push(l); }
 let acc = 0, last = performance.now(), frames = 0, fpsT = 0, fps = 0;
 chunks.update(game.pos.x, game.pos.z, VIEW); placeCamera(0);
 document.getElementById('loading')?.remove(); (window as any).__ready = true;
-(window as any).__game = { traffic, vworld, npcRender, npcStats: () => ({ ...npcRender.stats(), vehicules: vrender.count(), circulation: traffic.cars.length, garees: vworld.list.filter(v => v.kind === 'gare').length, habitants: npcs.length, majEtatsMs: +statesMs.toFixed(1) }), sync: () => { chunks.update(game.pos.x, game.pos.z, VIEW); signs.update(game.pos.x, game.pos.z); snap = true; placeCamera(0); }, game, car, player, camera, renderer, stats: () => ({ fps, calls: renderer.info.render.calls, tris: renderer.info.render.triangles, chunks: chunks.loaded.size }) };
+(window as any).__game = { police, traffic, vworld, npcRender, npcStats: () => ({ ...npcRender.stats(), vehicules: vrender.count(), circulation: traffic.cars.length, garees: vworld.list.filter(v => v.kind === 'gare').length, habitants: npcs.length, majEtatsMs: +statesMs.toFixed(1) }), sync: () => { chunks.update(game.pos.x, game.pos.z, VIEW); signs.update(game.pos.x, game.pos.z); snap = true; placeCamera(0); }, game, car, player, camera, renderer, stats: () => ({ fps, calls: renderer.info.render.calls, tris: renderer.info.render.triangles, chunks: chunks.loaded.size }) };
 
 function frame(now: number) {
   const dt = Math.min(0.05, (now - last) / 1000); last = now; acc += dt;
@@ -103,7 +108,7 @@ function frame(now: number) {
   chunks.update(fx, fz, VIEW); signs.update(fx, fz); updateStates(now, fx, fz); placeCamera(dt);
   if (!game.interior.inside) npcRender.update(dt, statesArr, fx, fz, game.observed?.id ?? null, now, game.clock.scale); if (game.observed && os) panel.update(game.observed, os, sim, game.clock.day, game.clock.hour, now, game.clock.scale); else if (panel.el.style.display !== 'none') panel.show(false);
   vrender.begin(); const flashOn = Math.floor(now / 280) % 2 ? 1 : 0.2;
-  for (const v of vworld.list) { if (Math.abs(v.x - fx) > 280 || Math.abs(v.z - fz) > 280) continue; vrender.add(v.type, v.paint, v.x, v.z, v.h, SPECS[v.type].police && v.kind === 'patrouille' ? flashOn : 1, v.hp / SPECS[v.type].hp); }
+  for (const v of vworld.list) { if (Math.abs(v.x - fx) > 280 || Math.abs(v.z - fz) > 280) continue; vrender.add(v.type, v.paint, v.x, v.z, v.h, SPECS[v.type].police && (v.kind === 'patrouille' || v.kind === 'poursuite' || (v.kind === 'gare' && game.heat.stars > 0)) ? flashOn : 1, v.hp / SPECS[v.type].hp); }
   for (const d of npcRender.drivers) { const n = game.npcs.get(d.id)!; const t = n.seed % 9 === 0 ? 'utilitaire' : CIVIL_TYPES[n.seed % CIVIL_TYPES.length]; vrender.add(t, PAINTS[(n.seed >> 3) % PAINTS.length], d.x, d.z, d.h); }
   vrender.end(); car.setFlash(false);
   if (game.mode === 'car') hud.vehicle(car.spec.nom, Math.round(Math.abs(car.speed) * 3.6), Math.round(car.hp / car.spec.hp * 100), car.upgrade); else hud.hideVehicle();

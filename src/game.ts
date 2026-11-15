@@ -7,6 +7,9 @@ import { SPECS } from './vehicles/specs';
 import type { VehicleWorld, WVehicle } from './vehicles/world';
 import type { Traffic, Obstacle } from './vehicles/traffic';
 import type { Smoke } from './vehicles/smoke';
+import type { Effects } from './vehicles/effects';
+import type { Police } from './police/police';
+import { witnessFactor, fineFor } from './police/rules';
 import { Player } from './player/player';
 import { Needs } from './survival/needs';
 import { Heat } from './survival/heat';
@@ -26,13 +29,31 @@ export type Mode = 'foot' | 'car';
 export class Game {
   mode: Mode = 'foot'; sleeping = false; money = 40; inv = { nourriture: 1, eau: 1 }; looted = new Set<string>();
   needs = new Needs(); heat = new Heat(); clock: Clock; coll: Collision;
-  vehicles!: VehicleWorld; traffic!: Traffic; smoke?: Smoke; interior!: InteriorManager; observed: Npc | null = null; npcs = new Map<number, Npc>(); sim?: NpcSim; states = new Map<number, NpcState>(); talkCount = 0; camYaw = 0; camPitch = 0.28; private saveT = 0; private ctl: Controls = { throttle: 0, brake: 0, steer: 0, handbrake: false };
+  vehicles!: VehicleWorld; traffic!: Traffic; smoke?: Smoke; tireSmoke?: Smoke; fx?: Effects; police?: Police; private ramT = 0; private speedMsg = 0; interior!: InteriorManager; observed: Npc | null = null; npcs = new Map<number, Npc>(); sim?: NpcSim; states = new Map<number, NpcState>(); talkCount = 0; camYaw = 0; camPitch = 0.28; private saveT = 0; private ctl: Controls = { throttle: 0, brake: 0, steer: 0, handbrake: false };
   constructor(public world: WorldData, public pois: Poi[], public car: Car, public player: Player, public input: Input, public hud: Hud, startHour: number, private start: { x: number; z: number; h: number }, scene: THREE.Scene) {
     this.clock = new Clock(startHour); this.coll = new Collision(world.builds); this.respawn(false);
     this.interior = new InteriorManager(this, new BuildingIndex(world.builds, pois), scene);
   }
-  attachVehicles(vw: VehicleWorld, tr: Traffic, smoke: Smoke) { this.vehicles = vw; this.traffic = tr; this.smoke = smoke; }
-  private obstacles(): Obstacle[] { return [{ x: this.car.pos.x, z: this.car.pos.z, h: this.car.heading, speed: this.car.speed, L: this.car.spec.L }]; }
+  attachVehicles(vw: VehicleWorld, tr: Traffic, smoke: Smoke, tire?: Smoke, fx?: Effects) { this.vehicles = vw; this.traffic = tr; this.smoke = smoke; this.tireSmoke = tire; this.fx = fx; }
+  private obstacles(): Obstacle[] { const o: Obstacle[] = [{ x: this.car.pos.x, z: this.car.pos.z, h: this.car.heading, speed: this.car.speed, L: this.car.spec.L }]; for (const u of this.police?.units ?? []) o.push({ x: u.v.x, z: u.v.z, h: u.v.h, speed: u.v.speed, L: SPECS[u.v.type].L }); return o; }
+  /** Délit : n'est comptabilisé qu'en proportion de ce qui a été vu (gendarmerie à portée, témoin, personne). */
+  crime(v: number) {
+    let npcD: number | null = null; const px = this.pos.x, pz = this.pos.z;
+    for (const s of this.states.values()) { if (s.kind === 'dedans' || s.kind === 'absent') continue; const d = Math.hypot(s.x - px, s.z - pz); if (d < (npcD ?? 1e9)) npcD = d; }
+    const pd = this.police ? this.police.nearest : 999; this.heat.add(v * witnessFactor(pd < 999 ? pd : null, npcD));
+  }
+  /** Arrestation : amende, perte de la marchandise (inventaire), retour devant la gendarmerie, trois heures perdues. Pas de mort. */
+  private arrest() {
+    const stars = this.heat.stars; const fine = fineFor(this.money, stars); this.money -= fine; const lost = this.inv.nourriture + this.inv.eau; this.inv = { nourriture: 0, eau: 0 }; this.heat.value = 0; this.police?.clearAll();
+    const gp = this.pois.find(p => p.sous_type === 'police' && /gendarmerie/i.test(p.nom)) ?? { x: -848, y: -89 }; this.mode = 'foot'; this.player.root.visible = true; this.player.pos.set(gp.x + 3, 0, gp.y + 6); this.camYaw = 0; this.car.speed = 0; this.clock.hour += 3; this.needs.tick(3, false);
+    this.hud.toast(`ARRESTATION — amende ${fine} €${lost ? `, marchandise saisie (${lost})` : ''}. Vous sortez de la gendarmerie.`, 7);
+  }
+  attachPolice(p: Police) { this.police = p; }
+  private policeUpdate(dt: number) {
+    if (this.ramT > 0) this.ramT -= dt; if (!this.police) return; const inCar = this.mode === 'car'; const out = this.police.update(dt, { px: this.pos.x, pz: this.pos.z, pspeed: inCar ? Math.abs(this.car.speed) : this.player.speed, heading: this.car.heading, inCar, stars: this.heat.stars }, this.heat);
+    if (out.speeding) { this.crime(8); this.hud.toast('Excès de vitesse repéré par une patrouille !', 2.5); }
+    this.hud.alert(this.heat.stars, out.seen); if (out.arrested) this.arrest();
+  }
   nearestVehicle(maxD = 3.6): WVehicle | null { let b: WVehicle | null = null, bd = maxD; for (const v of this.vehicles.near(this.player.pos.x, this.player.pos.z, maxD + 3)) { const d = Math.hypot(v.x - this.player.pos.x, v.z - this.player.pos.z); if (d < bd) { bd = d; b = v; } } return b; }
   /** Monter dans un véhicule du monde (garé : vol discret ; en circulation et arrêté : car-jacking). Le véhicule actuel est laissé sur place. */
   private enterWorldVehicle(v: WVehicle): boolean {
@@ -40,8 +61,8 @@ export class Game {
     if (sp.police) { this.hud.toast('Impossible de prendre un véhicule de gendarmerie.'); return false; }
     if (v.kind !== 'gare' && Math.abs(v.speed) > 2) { this.hud.toast('Il roule trop vite pour monter.'); return false; }
     if (!v.mine) {
-      if (v.kind === 'trafic') { this.heat.add(35); this.hud.toast(`Vous arrachez le conducteur de sa ${sp.nom.toLowerCase()} !`); }
-      else { this.heat.add(14); if (Math.random() < 0.25) { this.heat.add(12); this.hud.toast('L\'alarme se déclenche !'); } else this.hud.toast(`Vous forcez la ${sp.nom.toLowerCase()}.`); }
+      if (v.kind === 'trafic') { this.crime(35); this.hud.toast(`Vous arrachez le conducteur de sa ${sp.nom.toLowerCase()} !`); }
+      else { this.crime(14); if (Math.random() < 0.25) { this.crime(12); this.hud.toast('L\'alarme se déclenche !'); } else this.hud.toast(`Vous forcez la ${sp.nom.toLowerCase()}.`); }
     } else this.hud.toast(`Vous montez dans votre ${sp.nom.toLowerCase()}.`);
     if (v.kind === 'trafic') this.traffic.release(v); this.vehicles.remove(v);
     const c = this.car; this.vehicles.add({ type: c.spec.type, paint: c.paint, hp: c.hp, x: c.pos.x, z: c.pos.z, h: c.heading, speed: 0, kind: 'gare', mine: true, upgrade: c.upgrade, stun: 0 });
@@ -83,9 +104,9 @@ export class Game {
     }
     this.interior.tick(dt);
     if (this.interior.inside) this.interior.update(dt); else if (this.sleeping) this.updateSleep(dt); else if (this.mode === 'car') this.updateCar(dt); else this.updateFoot(dt);
-    if (this.sleeping && !this.interior.inside && Math.random() < dt * 0.02) { this.wake(); this.heat.add(12); this.hud.toast('Du bruit vous réveille : on vous a repéré.'); }
+    if (this.sleeping && !this.interior.inside && Math.random() < dt * 0.02) { this.wake(); this.crime(12); this.hud.toast('Du bruit vous réveille : on vous a repéré.'); }
     if (this.sleeping && (inp.hit('KeyR', 'sleep') || this.needs.s.energie >= 98)) this.wake();
-    this.traffic.update(dt, this.pos.x, this.pos.z, this.obstacles());
+    this.traffic.update(dt, this.pos.x, this.pos.z, this.obstacles()); this.policeUpdate(dt);
     const h = this.clock.tick(dt); this.needs.tick(h, this.sleeping, this.mode === 'foot' && inp.run && this.player.speed > 3 ? 1.8 : 1);
     this.heat.tick(h, this.mode === 'foot' && this.player.speed < 1);
     if (!this.interior.busy) this.hud.veil(this.sleeping ? 0.75 : this.needs.s.energie < 8 ? 0.35 : 0); this.hud.tick(dt);
@@ -112,7 +133,7 @@ export class Game {
   private updateCar(dt: number) {
     const inp = this.input, c = this.ctl;
     c.throttle = Math.max(0, inp.y); c.brake = Math.max(0, -inp.y); c.steer = -inp.x; c.handbrake = inp.handbrake;
-    this.car.update(dt, c); this.collideCar(); this.engineSmoke(dt);
+    this.car.update(dt, c); this.collideCar(); this.engineSmoke(dt); this.drivingEffects(dt);
     this.player.pos.copy(this.car.pos);
     if (inp.hit('KeyG', 'garage')) this.garage();
     if (inp.hit('KeyE', 'action')) {
@@ -135,12 +156,17 @@ export class Game {
       }
       if (worst > 0) {
         c.pos.x += nx * worst * 0.6; c.pos.z += nz * worst * 0.6; v.x -= nx * worst * 0.4; v.z -= nz * worst * 0.4;
-        const rel = Math.abs(c.speed - v.speed * (vx * fx + vz * fz)); if (rel > 2.5) { this.crash(rel * 1.8); v.hp = Math.max(0, v.hp - rel * 2.2 / sp.mass); if (v.kind !== 'gare') { v.stun = 3; if (rel > 5) this.heat.add(4); } else if (rel > 6) this.heat.add(2); }
+        const rel = Math.abs(c.speed - v.speed * (vx * fx + vz * fz)); if (rel > 2.5) { this.crash(rel * 1.8); v.hp = Math.max(0, v.hp - rel * 2.2 / sp.mass); if (sp.police) { v.stun = 1.2; if ((this.ramT -= 0) <= 0 && rel > 3) { this.crime(15); this.ramT = 3; this.hud.toast('Vous percutez un véhicule de gendarmerie !', 2); } } else if (v.kind !== 'gare') { v.stun = 3; if (rel > 5) this.crime(4); } else if (rel > 6) this.crime(2); }
         c.speed *= 0.55;
       }
     }
   }
-  private crash(dmg: number) { if (dmg < 1.2) return; if (this.car.damage(dmg)) this.hud.toast('Le moteur est en panne !', 4); else if (dmg > 12) this.hud.toast('Gros choc !', 1.5); }
+  private crash(dmg: number) { if (dmg < 1.2) return; const fx = Math.sin(this.car.heading), fz = Math.cos(this.car.heading); this.fx?.burst(this.car.pos.x + fx * this.car.spec.L * 0.45, 0.6, this.car.pos.z + fz * this.car.spec.L * 0.45, Math.min(30, Math.round(dmg))); if (this.car.damage(dmg)) this.hud.toast('Le moteur est en panne !', 4); else if (dmg > 12) this.hud.toast('Gros choc !', 1.5); }
+  drivingEffects(dt: number) {
+    const c = this.car, fx = Math.sin(c.heading), fz = Math.cos(c.heading), rx = fz, rz = -fx, back = -c.spec.wheelbase / 2, track = c.spec.W / 2 - 0.2;
+    for (const sg of [-1, 1]) { const x = c.pos.x + fx * back + rx * track * sg, z = c.pos.z + fz * back + rz * track * sg; const id = 'w' + sg; if (c.slip) { this.fx?.skid(id, x, z, c.heading); this.tireSmoke?.emit(x, 0.25, z, 0.5, dt * 0.6, true); } else this.fx?.endSkid(id); }
+    this.fx?.update(dt); this.tireSmoke?.update(dt);
+  }
   engineSmoke(dt: number) { const c = this.car; const k = 1 - c.hp / c.spec.hp; if (k > 0.45 && this.smoke) { const fx = Math.sin(c.heading), fz = Math.cos(c.heading); this.smoke.emit(c.pos.x + fx * c.spec.L * 0.3, 1.1, c.pos.z + fz * c.spec.L * 0.3, Math.min(1, (k - 0.45) * 1.9), dt); } this.smoke?.update(dt); }
   private consumables() {
     const inp = this.input;
@@ -152,10 +178,11 @@ export class Game {
     if (inp.hit('KeyR', 'sleep')) { if (this.sleeping) return; if (this.mode === 'foot' && this.player.speed > 0.5) return; this.sleeping = true; this.hud.toast('Vous vous endormez… (R pour vous réveiller)'); }
     if (inp.hit('KeyX', 'pee')) {
       this.needs.relieve(); const day = this.clock.hour > 7 && this.clock.hour < 23;
-      const seen = day && this.nearestPoi(40) !== null && Math.random() < 0.55; if (seen) { this.heat.add(18); this.hud.toast('Quelqu\'un vous a vu… on va en parler.'); } else this.hud.toast('Soulagé. Personne n\'a rien vu.');
+      const seen = day && this.nearestPoi(40) !== null && Math.random() < 0.55; if (seen) { this.crime(18); this.hud.toast('Quelqu\'un vous a vu… on va en parler.'); } else this.hud.toast('Soulagé. Personne n\'a rien vu.');
     }
   }
   private contextual() {
+    if (this.police && this.police.arrestTimer > 0.2) { this.hud.prompt(`ARRESTATION… ${Math.round(Math.min(1, this.police.arrestTimer / 2.5) * 100)} % — bougez pour fuir !`); return; }
     if (this.sleeping) { this.hud.prompt('R : se réveiller'); return; }
     if (this.interior.busy) { this.hud.prompt(''); return; }
     if (this.mode === 'car') { const gp = this.nearestPoi(32); const gar = gp && ['car_repair', 'car', 'gas'].includes(gp.sous_type) && Math.abs(this.car.speed) < 1; this.hud.prompt(`E : descendre · L : phares${gar ? ' · G : garage' : ''}`); return; }

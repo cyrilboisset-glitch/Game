@@ -10,6 +10,7 @@ canvas{display:block}
 #bars{right:14px;top:14px;left:auto;width:150px;padding:8px 10px;z-index:2}.bar{display:flex;align-items:center;gap:6px;font-size:11px;margin:3px 0}.bar span{width:46px}.bar i{flex:1;height:7px;background:#0007;border-radius:4px;overflow:hidden}.bar b{display:block;height:100%}.bar.warn span{color:#ff8a7a}
 #minimap{position:fixed;left:14px;top:100px;width:150px;height:150px;border-radius:50%;border:2px solid #fff6;pointer-events:none}
 #veil{position:fixed;inset:0;background:#000;opacity:0;transition:opacity .6s;pointer-events:none}
+#alert{position:fixed;inset:0;pointer-events:none;opacity:0;transition:opacity .4s;box-shadow:inset 0 0 90px 10px rgba(220,30,30,.0)}#alert.on{opacity:1;animation:siren 1s infinite}#alert.on.seen{animation-duration:.5s}@keyframes siren{0%,100%{box-shadow:inset 0 0 120px 14px rgba(230,30,40,.45)}50%{box-shadow:inset 0 0 120px 14px rgba(40,90,255,.5)}}
 #prompt{background:rgba(10,14,20,.7)}.ui{position:fixed;touch-action:none;user-select:none;z-index:5}
 #joy{left:24px;bottom:34px;width:130px;height:130px;border-radius:50%;background:#fff2;border:2px solid #fff5;position:fixed}#knob{position:absolute;left:41px;top:41px;width:48px;height:48px;border-radius:50%;background:#fffa}
 #btns{position:fixed;right:14px;bottom:28px;display:grid;grid-template-columns:repeat(2,78px);gap:8px}#btns button{height:52px;border-radius:14px;border:2px solid #fff5;background:#1a2230cc;color:#fff;font:600 13px system-ui}

@@ -9,7 +9,7 @@ export class Car {
   root = new THREE.Group(); body = new THREE.Group(); spec: VehicleSpec = SPECS.depart; paint = 0xb9b2a0; hp = 70; upgrade = 0;
   pos = new THREE.Vector3(); heading = 0; speed = 0; steer = 0; lateral = 0; yawRate = 0;
   private wheelMeshes: { m: THREE.Mesh; front: boolean }[] = []; private mats = vehicleMaterials();
-  headlights: THREE.SpotLight[] = []; lightsOn = false; wheelRoll = 0; smokeAcc = 0;
+  headlights: THREE.SpotLight[] = []; beams: THREE.Mesh[] = []; lightsOn = false; slip = 0; braking = false; wheelRoll = 0; smokeAcc = 0;
   get length() { return this.spec.L; }
   get dead() { return this.hp <= 0; }
   /** Charge un modèle de véhicule (remplace l'actuel) avec sa peinture et son état. */
@@ -19,10 +19,11 @@ export class Car {
     const g = vehicleGeometry(type, false); this.body.add(Object.assign(new THREE.Mesh(g.paint, this.mats.paint), { castShadow: true, receiveShadow: true }), Object.assign(new THREE.Mesh(g.trim, this.mats.trim), { castShadow: true }), new THREE.Mesh(g.glass, this.mats.glass), new THREE.Mesh(g.lights, this.mats.lights));
     for (const w of g.wheels) { const m = new THREE.Mesh(w.x < 0 ? g.wheelL : g.wheelR, this.mats.trim); m.position.set(w.x, w.y, w.z); m.castShadow = true; this.body.add(m); this.wheelMeshes.push({ m, front: w.front }); }
     const L = this.spec.L; for (const x of [-0.6, 0.6]) { const sp = new THREE.SpotLight(0xfff1d0, 0, 90, 0.5, 0.6, 1.4); sp.position.set(x, 0.75, L / 2 - 0.2); const t = new THREE.Object3D(); t.position.set(x * 0.5, 0.2, L / 2 + 25); this.body.add(sp, t); sp.target = t; this.headlights.push(sp); }
+    for (const x of [-0.6, 0.6]) { const cone = new THREE.Mesh(new THREE.ConeGeometry(2.4, 16, 20, 1, true).translate(0, -8, 0).rotateX(-Math.PI / 2 + 0.08), new THREE.MeshBasicMaterial({ color: 0xfff2cf, transparent: true, opacity: 0.07, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false })); cone.position.set(x, 0.75, L / 2); cone.scale.set(0.45, 0.45, 1); cone.visible = false; this.body.add(cone); this.beams.push(cone); }
     this.root.add(this.body); this.refreshPaint(); if (this.lightsOn) this.setLights(true);
   }
   refreshPaint() { const dirt = 1 - Math.min(1, this.hp / this.spec.hp); this.mats.paint.color.set(this.paint).lerp(new THREE.Color(0x2a2522), dirt * 0.55); }
-  setLights(on: boolean) { this.lightsOn = on; for (const h of this.headlights) h.intensity = on ? 900 : 0; }
+  setLights(on: boolean) { this.lightsOn = on; for (const h of this.headlights) h.intensity = on ? 900 : 0; for (const b of this.beams) b.visible = on; }
   /** Dégâts : retourne true si le véhicule vient de tomber en panne. */
   damage(amount: number) { const was = this.hp > 0; this.hp = Math.max(0, this.hp - amount / this.spec.mass); this.refreshPaint(); return was && this.hp <= 0; }
   repair() { this.hp = this.spec.hp; this.refreshPaint(); }
@@ -40,6 +41,8 @@ export class Car {
     this.lateral -= this.lateral * Math.min(1, grip * dt);
     const fx = Math.sin(this.heading), fz = Math.cos(this.heading);
     this.pos.x += (fx * this.speed + fz * this.lateral) * dt; this.pos.z += (fz * this.speed - fx * this.lateral) * dt;
+    this.braking = c.brake > 0.3 && this.speed > 1; this.mats.lights.color.setScalar(this.braking ? 1.7 : 1);
+    this.slip = (c.handbrake && Math.abs(this.speed) > 5) || (c.brake > 0.7 && this.speed > 14) || Math.abs(this.lateral) > 2.2 ? 1 : 0;
     this.wheelRoll += this.speed * dt / s.wheelR;
     for (const w of this.wheelMeshes) { w.m.rotation.set(this.wheelRoll, w.front ? this.steer * 0.8 : 0, 0, 'YXZ'); }
     this.root.position.copy(this.pos); this.root.rotation.y = this.heading;
