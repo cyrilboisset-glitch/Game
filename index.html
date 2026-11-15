@@ -7,8 +7,14 @@ canvas{display:block}
 #hud{position:fixed;inset:0;pointer-events:none;color:#fff;text-shadow:0 1px 3px #000a}
 .pill{position:absolute;background:rgba(10,14,20,.55);backdrop-filter:blur(6px);padding:6px 12px;border-radius:10px;font-weight:600;font-size:14px}
 #loading{position:fixed;inset:0;background:#10151c;color:#cfd8e3;display:flex;align-items:center;justify-content:center;font-size:18px}
+#bars{right:14px;top:14px;left:auto;width:150px;padding:8px 10px;z-index:2}.bar{display:flex;align-items:center;gap:6px;font-size:11px;margin:3px 0}.bar span{width:46px}.bar i{flex:1;height:7px;background:#0007;border-radius:4px;overflow:hidden}.bar b{display:block;height:100%}.bar.warn span{color:#ff8a7a}
+#minimap{position:fixed;left:14px;top:100px;width:150px;height:150px;border-radius:50%;border:2px solid #fff6;pointer-events:none}
+#veil{position:fixed;inset:0;background:#000;opacity:0;transition:opacity .6s;pointer-events:none}
+#prompt{background:rgba(10,14,20,.7)}.ui{position:fixed;touch-action:none;user-select:none;z-index:5}
+#joy{left:24px;bottom:34px;width:130px;height:130px;border-radius:50%;background:#fff2;border:2px solid #fff5;position:fixed}#knob{position:absolute;left:41px;top:41px;width:48px;height:48px;border-radius:50%;background:#fffa}
+#btns{position:fixed;right:14px;bottom:28px;display:grid;grid-template-columns:repeat(2,78px);gap:8px}#btns button{height:52px;border-radius:14px;border:2px solid #fff5;background:#1a2230cc;color:#fff;font:600 13px system-ui}
+@media (pointer:coarse){#bars{top:10px}#minimap{top:96px}#info{display:none}}
 </style></head><body>
 <div id="loading">Chargement de Pontcharra…</div>
-<div id="hud"><div class="pill" id="clock" style="left:14px;top:14px"></div><div class="pill" id="place" style="left:14px;top:56px"></div><div class="pill" id="speed" style="right:14px;bottom:14px;font-size:20px"></div>
-<div class="pill" id="info" style="left:14px;bottom:14px;font-size:11px;opacity:.8">ZQSD / flèches : conduire · Espace : frein à main · L : phares · H : changer l'heure</div></div>
+<div id="hud"><div class="pill" id="info" style="left:14px;bottom:14px;font-size:11px;opacity:.85">ZQSD : marcher · Maj : courir · E : monter/interagir · F : voler · 1 manger · 2 boire · R : dormir · X : besoin · L : phares · glisser : regarder</div><button id="reset" class="pill ui" style="right:14px;top:150px;pointer-events:auto;font-size:11px;border:0;color:#fff">Nouvelle partie</button></div>
 <script type="module" src="/src/main.ts"></script></body></html>
