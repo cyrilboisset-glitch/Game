@@ -73,13 +73,17 @@ export class Chunks {
       let xs = Infinity, xe = -Infinity, ys = Infinity, ye = -Infinity; for (const q of p) { xs = Math.min(xs, q[0]); xe = Math.max(xe, q[0]); ys = Math.min(ys, q[1]); ye = Math.max(ye, q[1]); }
       for (let k = 0, tries = 0; k < n && tries < n * 6; tries++) { const x = xs + rnd() * (xe - xs), z = ys + rnd() * (ye - ys); if (pointInPoly(x, z, p) && !inBuilding(x, z)) { addTree(trees, leaves, x, z, 0.9 + rnd() * 0.9); k++; } }
     }
-    const add = (b: MeshBuilder, mat: THREE.Material, shadow = false, recv = true) => { const geo = b.build(); if (!geo) return; const me = new THREE.Mesh(geo, mat); me.castShadow = shadow; me.receiveShadow = recv; g.add(me); };
+    const add = (b: MeshBuilder, mat: THREE.Material, shadow = false, recv = true) => { const geo = b.build(); if (!geo) return; const me = new THREE.Mesh(geo, mat); me.castShadow = shadow; me.userData.shadowCaster = shadow; me.receiveShadow = recv; g.add(me); };
     add(BB.wall, m.wall, true); add(BB.roof, m.roof, true); add(BB.flat, m.flat, true);
     add(RB.marked, m.asphaltMarked); add(RB.plain, m.asphalt); add(RB.paving, m.pavement); add(RB.gravel, m.gravel);
     add(ground, m.greens); add(water, m.water, false); add(trees, m.bark, true); add(leaves, m.leaves, true); add(poles, m.metal, true); add(heads, m.lampHead, false, false);
     return g;
   }
 
+  /** Seuls les chunks proches projettent des ombres (économie de passes de rendu). range = 0 : aucune. */
+  setShadowRange(px: number, pz: number, range: number) {
+    for (const [k, g] of this.loaded) { const [cx, cy] = k.split(',').map(Number); const d = Math.hypot((cx + 0.5) * CHUNK - px, (cy + 0.5) * CHUNK - pz); const on = range > 0 && d < range + CHUNK * 0.7; if (g.userData.sh !== on) { g.userData.sh = on; g.traverse(o => { const m = o as THREE.Mesh; if (m.isMesh) m.castShadow = on && m.userData.shadowCaster !== false; }); } }
+  }
   update(px: number, pz: number, radius: number) {
     const [cx, cy] = cOf(px, pz); const n = Math.ceil(radius / CHUNK); const want = new Set<string>();
     for (let dx = -n; dx <= n; dx++) for (let dy = -n; dy <= n; dy++) {

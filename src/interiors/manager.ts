@@ -32,7 +32,7 @@ export class InteriorManager {
     const poi = this.index.poi(e.bi); const st = this.access(e.bi, poi);
     if (st === 'ferme') { this.g.hud.toast('C\'est fermé.'); return true; }
     this.forced = st === 'verrouille'; this.poi = poi;
-    if (this.forced) { this.g.crime(20); const alarm = poi ? Math.random() < 0.35 : Math.random() < 0.15; if (alarm) { this.g.crime(20); this.g.hud.toast('Porte forcée… ALARME !'); } else this.g.hud.toast('Vous forcez la porte.'); }
+    if (this.forced) { this.g.crime(20); const alarm = poi ? Math.random() < 0.35 : Math.random() < 0.15; if (alarm) { this.g.crime(20); this.g.sfx('alarm'); this.g.hud.toast('Porte forcée… ALARME !'); } else { this.g.sfx('glass'); this.g.hud.toast('Vous forcez la porte.'); } }
     this.transition(() => this.enter(e)); return true;
   }
   private transition(fn: () => void) { this.fade = { t: 0.5, fn }; this.g.hud.veil(1); }
@@ -83,7 +83,7 @@ export class InteriorManager {
       case 'manger': if (!open) { if (g.looted.has(key)) return; once(); g.needs.eat(25); g.crime(5); return hud.toast('Vous grignotez en cuisine.'); } if (g.money < 12) return hud.toast('Il vous faut 12 €.'); g.money -= 12; g.needs.eat(60); g.needs.drink(15); hud.toast('Bon repas (−12 €).'); break;
       case 'boire': if (!open) { if (g.looted.has(key)) return; once(); g.needs.drink(25); g.crime(5); return hud.toast('Vous buvez derrière le bar.'); } if (g.money < 4) return hud.toast('Il vous faut 4 €.'); g.money -= 4; g.needs.drink(35); hud.toast('Une boisson (−4 €).'); break;
       case 'fouiller': { once(); const r = Math.random(); if (r < 0.4) { const m = rr(5, 35); g.money += m; hud.toast(`Vous trouvez ${m} €.`); } else if (r < 0.65) { g.inv.nourriture++; hud.toast('Vous trouvez de quoi manger.'); } else if (r < 0.85) { g.inv.eau++; hud.toast('Vous trouvez une bouteille d\'eau.'); } else hud.toast('Rien d\'intéressant.'); break; }
-      case 'coffre': if (g.looted.has(key)) return; once(); { const m = rr(250, 700); g.money += m; g.crime(60); if (Math.random() < 0.6) g.crime(30); hud.toast(`Coffre forcé : +${m} € — la gendarmerie sera prévenue.`); } break;
+      case 'coffre': g.sfx('alarm'); if (g.looted.has(key)) return; once(); { const m = rr(250, 700); g.money += m; g.crime(60); if (Math.random() < 0.6) g.crime(30); hud.toast(`Coffre forcé : +${m} € — la gendarmerie sera prévenue.`); } break;
       case 'dormir': g.sleeping = true; hud.toast('Vous vous couchez… (R pour vous réveiller)'); break;
       case 'toilettes': g.needs.relieve(); hud.toast('Soulagé, en toute discrétion.'); break;
       case 'robinet': g.needs.drink(30); hud.toast('Vous buvez au robinet.'); break;

@@ -44,3 +44,12 @@ Journal de missions (J) : offres du jour déterministes (jour + graine). Types :
 Réputation 0-100 : majore la paie jusqu'à +50 %. Arrestation = mission échouée (marchandise saisie).
 Concession (POI de type « car ») : B acheter, N changer de modèle ; le véhicule acheté t'attend devant. Garage (G) : réparer puis améliorer le moteur.
 Limites : pas de location de logement, le taxi ne gère qu'un passager adulte à pied, offres générées au début de chaque jour de jeu.
+
+## Audio, qualité et optimisation (phase 8)
+Audio 100 % procédural (WebAudio, aucun fichier) : moteur à 5 rapports, roulement, dérapage, klaxon (H), sirène deux tons selon la distance des unités, ambiance (vent, oiseaux le jour, grillons la nuit), pas, chocs, portes, vitres, alarmes, jingles de mission/arrestation. Le son démarre au premier geste (règle des navigateurs). M : couper le son.
+Réglages (⚙ ou F2) : qualité Auto/Bas/Moyen/Élevé, volume. Mode Auto : baisse si < 24 FPS pendant 3 s, remonte si > 54 FPS pendant 10 s et stable depuis 25 s (src/core/quality.ts). Les niveaux règlent résolution, ombres (portée limitée aux chunks proches), distance d'affichage, silhouettes/avatars, véhicules, circulation.
+Mesures (tools/perf.cjs, Chromium headless, 412×915, rendu logiciel — les FPS ne sont pas représentatifs d'un téléphone) : bas 90 appels / 122 k triangles, moyen 102 / 196 k, élevé 116 / 427 k (budget visé : ≤ 150 appels, ≤ 1,5 M triangles).
+Limites : aucun test sur un vrai téléphone (Xiaomi 14T) ; le son n'a pas pu être écouté dans l'environnement de développement (logique testée, rendu sonore non évalué) ; un seul modèle de corps pour les habitants ; véhicules et bâtiments stylisés.
+
+## Contrôles (résumé)
+ZQSD/flèches : bouger · Maj : courir · Espace : frein à main · H : klaxon · E : monter/descendre/entrer/parler · 1 manger · 2 boire · R : dormir · X : besoin · L : phares · G : garage · B/N : concession · J : missions · O ou toucher : observer un habitant · M : son · F2 : réglages. Mobile : joystick + boutons, glisser pour regarder.

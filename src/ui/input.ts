@@ -1,6 +1,6 @@
 /** Entrées unifiées : clavier/souris sur PC, joystick + boutons tactiles sur mobile. */
 export class Input {
-  x = 0; y = 0; run = false; handbrake = false; lookDX = 0; lookDY = 0;
+  x = 0; y = 0; run = false; handbrake = false; horn = false; lookDX = 0; lookDY = 0;
   private keys = new Set<string>(); private pressed = new Set<string>(); private touchMove = { x: 0, y: 0 }; private touchBtn = new Set<string>();
   readonly touch = matchMedia('(pointer: coarse)').matches || new URLSearchParams(location.search).has('touch');
   constructor(el: HTMLElement) {
@@ -16,7 +16,7 @@ export class Input {
     const k = (...c: string[]) => c.some(x => this.keys.has(x));
     this.x = THREE_clamp((k('KeyD', 'ArrowRight') ? 1 : 0) - (k('KeyA', 'KeyQ', 'ArrowLeft') ? 1 : 0) + this.touchMove.x);
     this.y = THREE_clamp((k('KeyW', 'KeyZ', 'ArrowUp') ? 1 : 0) - (k('KeyS', 'ArrowDown') ? 1 : 0) + this.touchMove.y);
-    this.run = k('ShiftLeft', 'ShiftRight') || this.touchBtn.has('run'); this.handbrake = k('Space') || this.touchBtn.has('brake');
+    this.run = k('ShiftLeft', 'ShiftRight') || this.touchBtn.has('run'); this.handbrake = k('Space') || this.touchBtn.has('brake'); this.horn = k('KeyH') || this.touchBtn.has('horn');
   }
   /** Vrai une seule fois par appui (clavier ou bouton tactile). */
   hit(code: string, btn?: string) { const a = this.pressed.delete(code); const b = btn ? this.touchBtn.delete('hit:' + btn) : false; return a || b; }
@@ -25,7 +25,7 @@ export class Input {
   private buildTouch() {
     const root = document.createElement('div'); root.className = 'ui'; root.id = 'touch'; document.body.appendChild(root);
     root.innerHTML = `<div id="joy"><div id="knob"></div></div>
-      <div id="btns"><button data-a="action">E</button><button data-a="eat">Manger</button><button data-a="drink">Boire</button><button data-h="run">Courir</button><button data-h="brake">Frein</button><button data-a="sleep">Dormir</button><button data-a="pee">Besoin</button><button data-a="lights">Phares</button><button data-a="garage">Garage</button><button data-a="missions">Missions</button><button data-a="buy">Acheter</button><button data-a="next">Suivant</button></div>`;
+      <div id="btns"><button data-a="action">E</button><button data-a="eat">Manger</button><button data-a="drink">Boire</button><button data-h="run">Courir</button><button data-h="brake">Frein</button><button data-a="sleep">Dormir</button><button data-a="pee">Besoin</button><button data-a="lights">Phares</button><button data-a="garage">Garage</button><button data-a="missions">Missions</button><button data-a="buy">Acheter</button><button data-a="next">Suivant</button><button data-h="horn">Klaxon</button></div>`;
     const joy = root.querySelector('#joy') as HTMLElement, knob = root.querySelector('#knob') as HTMLElement; let id = -1;
     const upd = (e: PointerEvent) => { const r = joy.getBoundingClientRect(); let dx = (e.clientX - (r.left + r.width / 2)) / (r.width / 2), dy = (e.clientY - (r.top + r.height / 2)) / (r.height / 2); const l = Math.hypot(dx, dy); if (l > 1) { dx /= l; dy /= l; } this.touchMove = { x: dx, y: -dy }; knob.style.transform = `translate(${dx * 38}px,${dy * 38}px)`; };
     joy.addEventListener('pointerdown', e => { id = e.pointerId; joy.setPointerCapture(id); upd(e); }); joy.addEventListener('pointermove', e => { if (e.pointerId === id) upd(e); });

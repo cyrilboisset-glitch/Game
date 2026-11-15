@@ -31,7 +31,7 @@ export type Mode = 'foot' | 'car';
 export class Game {
   mode: Mode = 'foot'; sleeping = false; money = 40; inv = { nourriture: 1, eau: 1 }; looted = new Set<string>();
   needs = new Needs(); heat = new Heat(); clock: Clock; coll: Collision;
-  vehicles!: VehicleWorld; traffic!: Traffic; smoke?: Smoke; tireSmoke?: Smoke; fx?: Effects; police?: Police; missions = new Missions(); offers: Offer[] = []; private mbase?: Omit<GenCtx, 'day' | 'rep' | 'at' | 'seed'>; private offerDay = -1; boarded: number | null = null; dealerSel = 0; onMissionsKey: () => void = () => {}; onOffers: () => void = () => {}; private ramT = 0; private speedMsg = 0; interior!: InteriorManager; observed: Npc | null = null; npcs = new Map<number, Npc>(); sim?: NpcSim; states = new Map<number, NpcState>(); talkCount = 0; camYaw = 0; camPitch = 0.28; private saveT = 0; private ctl: Controls = { throttle: 0, brake: 0, steer: 0, handbrake: false };
+  vehicles!: VehicleWorld; traffic!: Traffic; smoke?: Smoke; tireSmoke?: Smoke; fx?: Effects; police?: Police; missions = new Missions(); offers: Offer[] = []; private mbase?: Omit<GenCtx, 'day' | 'rep' | 'at' | 'seed'>; private offerDay = -1; boarded: number | null = null; dealerSel = 0; onMissionsKey: () => void = () => {}; sfx: (n: string, v?: number) => void = () => {}; onOffers: () => void = () => {}; private ramT = 0; private speedMsg = 0; interior!: InteriorManager; observed: Npc | null = null; npcs = new Map<number, Npc>(); sim?: NpcSim; states = new Map<number, NpcState>(); talkCount = 0; camYaw = 0; camPitch = 0.28; private saveT = 0; private ctl: Controls = { throttle: 0, brake: 0, steer: 0, handbrake: false };
   constructor(public world: WorldData, public pois: Poi[], public car: Car, public player: Player, public input: Input, public hud: Hud, startHour: number, private start: { x: number; z: number; h: number }, scene: THREE.Scene) {
     this.clock = new Clock(startHour); this.coll = new Collision(world.builds); this.respawn(false);
     this.interior = new InteriorManager(this, new BuildingIndex(world.builds, pois), scene);
@@ -49,7 +49,7 @@ export class Game {
     const stars = this.heat.stars; const fine = fineFor(this.money, stars); this.money -= fine; const lost = this.inv.nourriture + this.inv.eau; this.inv = { nourriture: 0, eau: 0 }; this.heat.value = 0; this.police?.clearAll();
     const gp = this.pois.find(p => p.sous_type === 'police' && /gendarmerie/i.test(p.nom)) ?? { x: -848, y: -89 }; this.mode = 'foot'; this.player.root.visible = true; this.player.pos.set(gp.x + 3, 0, gp.y + 6); this.camYaw = 0; this.car.speed = 0; this.clock.hour += 3; this.needs.tick(3, false);
     this.boarded = null; { const e = this.missions.fail('marchandise saisie'); if (e) this.onOffers(); }
-    this.hud.toast(`ARRESTATION — amende ${fine} €${lost ? `, marchandise saisie (${lost})` : ''}. Vous sortez de la gendarmerie.`, 7);
+    this.sfx('arrest'); this.hud.toast(`ARRESTATION — amende ${fine} €${lost ? `, marchandise saisie (${lost})` : ''}. Vous sortez de la gendarmerie.`, 7);
   }
   attachPolice(p: Police) { this.police = p; }
   attachMissions(base: Omit<GenCtx, 'day' | 'rep' | 'at' | 'seed'>) { this.mbase = base; this.refreshOffers(); }
@@ -75,8 +75,8 @@ export class Game {
     if (!ev) return; this.onOffers();
     if (ev.type === 'prise') { this.hud.toast(ev.label.replace(/^Prendre|^Retirer|^Récupérer/, 'Récupéré :'), 3); if (a.offer.kind === 'colis') this.crime(10); if (a.offer.kind === 'taxi') this.boarded = a.offer.npcId ?? null; }
     else if (ev.type === 'point') this.hud.toast(`${ev.label} validé (${ev.n}/${a.offer.stages.length})`, 2);
-    else if (ev.type === 'fini') { this.money += ev.pay; this.boarded = null; this.hud.toast(`Mission réussie : +${ev.pay} € · réputation +${ev.rep}${ev.note ? ' — ' + ev.note : ''}`, 6); this.refreshOffers(); }
-    else if (ev.type === 'echec') { this.boarded = null; this.hud.toast(`Mission échouée : ${ev.why}`, 5); }
+    else if (ev.type === 'fini') { this.money += ev.pay; this.boarded = null; this.sfx('win'); this.hud.toast(`Mission réussie : +${ev.pay} € · réputation +${ev.rep}${ev.note ? ' — ' + ev.note : ''}`, 6); this.refreshOffers(); }
+    else if (ev.type === 'echec') { this.boarded = null; this.sfx('fail'); this.hud.toast(`Mission échouée : ${ev.why}`, 5); }
   }
   /** Concession : acheter un véhicule (B) ou changer de modèle (N) près d'un garage/concessionnaire. */
   private dealer() {
@@ -98,9 +98,9 @@ export class Game {
     if (v.kind !== 'gare' && Math.abs(v.speed) > 2) { this.hud.toast('Il roule trop vite pour monter.'); return false; }
     if (!v.mine) {
       if (v.kind === 'trafic') { this.crime(35); this.hud.toast(`Vous arrachez le conducteur de sa ${sp.nom.toLowerCase()} !`); }
-      else { this.crime(14); if (Math.random() < 0.25) { this.crime(12); this.hud.toast('L\'alarme se déclenche !'); } else this.hud.toast(`Vous forcez la ${sp.nom.toLowerCase()}.`); }
+      else { this.crime(14); if (Math.random() < 0.25) { this.crime(12); this.sfx('alarm'); this.hud.toast('L\'alarme se déclenche !'); } else this.hud.toast(`Vous forcez la ${sp.nom.toLowerCase()}.`); }
     } else this.hud.toast(`Vous montez dans votre ${sp.nom.toLowerCase()}.`);
-    if (v.kind === 'trafic') this.traffic.release(v); this.vehicles.remove(v);
+    this.sfx('door'); if (v.kind === 'trafic') this.traffic.release(v); this.vehicles.remove(v);
     const c = this.car; this.vehicles.add({ type: c.spec.type, paint: c.paint, hp: c.hp, x: c.pos.x, z: c.pos.z, h: c.heading, speed: 0, kind: 'gare', mine: true, upgrade: c.upgrade, stun: 0 });
     c.setVehicle(v.type, v.paint, v.hp, v.upgrade); c.pos.set(v.x, 0, v.z); c.heading = v.h; c.speed = 0; c.root.position.copy(c.pos); c.root.rotation.y = c.heading; v.mine = true; return true;
   }
@@ -159,7 +159,7 @@ export class Game {
     p.root.position.copy(p.pos); this.car.update(dt, { throttle: 0, brake: 0, steer: 0, handbrake: true }); this.collideCar();
     const dCar = Math.hypot(this.car.pos.x - p.pos.x, this.car.pos.z - p.pos.z);
     if (inp.hit('KeyE', 'action')) {
-      if (dCar < 4.2) { this.mode = 'car'; p.root.visible = false; this.hud.toast('Vous montez dans la voiture.'); }
+      if (dCar < 4.2) { this.mode = 'car'; p.root.visible = false; this.sfx('door'); this.hud.toast('Vous montez dans la voiture.'); }
       else if (this.nearestVehicle()) { const v = this.nearestVehicle()!; if (this.enterWorldVehicle(v)) { this.mode = 'car'; p.root.visible = false; } }
       else { const n = this.nearNpc(); if (n) { const npc = this.npcs.get(n.id)!; this.hud.toast(line(npc, n, this.clock.hour, this.talkCount++), 5); } else this.interior.tryEnter(); }
     }
@@ -174,7 +174,7 @@ export class Game {
     if (inp.hit('KeyG', 'garage')) this.garage();
     if (inp.hit('KeyE', 'action')) {
       const f = this.car.heading, off = new THREE.Vector3(Math.cos(f) * 2.0, 0, -Math.sin(f) * 2.0); const np = this.car.pos.clone().add(off);
-      this.coll.resolve(np as any, this.player.radius); this.player.pos.copy(np); this.player.heading = f; this.camYaw = f; this.mode = 'foot'; this.player.root.visible = true; this.car.speed = 0; this.hud.toast('Vous descendez.');
+      this.coll.resolve(np as any, this.player.radius); this.player.pos.copy(np); this.player.heading = f; this.camYaw = f; this.mode = 'foot'; this.player.root.visible = true; this.car.speed = 0; this.sfx('door'); this.hud.toast('Vous descendez.');
     }
     if (inp.hit('KeyL', 'lights')) this.car.setLights(!this.car.lightsOn);
     this.consumables(); this.bodyActions();
@@ -197,7 +197,7 @@ export class Game {
       }
     }
   }
-  private crash(dmg: number) { if (dmg < 1.2) return; const fx = Math.sin(this.car.heading), fz = Math.cos(this.car.heading); this.fx?.burst(this.car.pos.x + fx * this.car.spec.L * 0.45, 0.6, this.car.pos.z + fz * this.car.spec.L * 0.45, Math.min(30, Math.round(dmg))); if (this.car.damage(dmg)) this.hud.toast('Le moteur est en panne !', 4); else if (dmg > 12) this.hud.toast('Gros choc !', 1.5); }
+  private crash(dmg: number) { if (dmg < 1.2) return; this.sfx('crash', dmg / 25); const fx = Math.sin(this.car.heading), fz = Math.cos(this.car.heading); this.fx?.burst(this.car.pos.x + fx * this.car.spec.L * 0.45, 0.6, this.car.pos.z + fz * this.car.spec.L * 0.45, Math.min(30, Math.round(dmg))); if (this.car.damage(dmg)) this.hud.toast('Le moteur est en panne !', 4); else if (dmg > 12) this.hud.toast('Gros choc !', 1.5); }
   drivingEffects(dt: number) {
     const c = this.car, fx = Math.sin(c.heading), fz = Math.cos(c.heading), rx = fz, rz = -fx, back = -c.spec.wheelbase / 2, track = c.spec.W / 2 - 0.2;
     for (const sg of [-1, 1]) { const x = c.pos.x + fx * back + rx * track * sg, z = c.pos.z + fz * back + rz * track * sg; const id = 'w' + sg; if (c.slip) { this.fx?.skid(id, x, z, c.heading); this.tireSmoke?.emit(x, 0.25, z, 0.5, dt * 0.6, true); } else this.fx?.endSkid(id); }
