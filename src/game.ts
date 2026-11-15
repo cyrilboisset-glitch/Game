@@ -12,6 +12,9 @@ import { Hud } from './ui/hud';
 import * as Save from './core/save';
 import { InteriorManager } from './interiors/manager';
 import { BuildingIndex } from './interiors/entry';
+import type { Npc } from './npc/identity';
+import { line } from './npc/dialogue';
+import type { NpcSim, NpcState } from './npc/sim';
 
 export type Mode = 'foot' | 'car';
 
@@ -19,11 +22,16 @@ export type Mode = 'foot' | 'car';
 export class Game {
   mode: Mode = 'foot'; sleeping = false; money = 40; inv = { nourriture: 1, eau: 1 }; looted = new Set<string>();
   needs = new Needs(); heat = new Heat(); clock: Clock; coll: Collision;
-  interior!: InteriorManager; camYaw = 0; camPitch = 0.28; private saveT = 0; private ctl: Controls = { throttle: 0, brake: 0, steer: 0, handbrake: false };
+  interior!: InteriorManager; observed: Npc | null = null; npcs = new Map<number, Npc>(); sim?: NpcSim; states = new Map<number, NpcState>(); talkCount = 0; camYaw = 0; camPitch = 0.28; private saveT = 0; private ctl: Controls = { throttle: 0, brake: 0, steer: 0, handbrake: false };
   constructor(public world: WorldData, public pois: Poi[], public car: Car, public player: Player, public input: Input, public hud: Hud, startHour: number, private start: { x: number; z: number; h: number }, scene: THREE.Scene) {
     this.clock = new Clock(startHour); this.coll = new Collision(world.builds); this.respawn(false);
     this.interior = new InteriorManager(this, new BuildingIndex(world.builds, pois), scene);
   }
+  attachNpcs(list: Npc[], sim: NpcSim) { this.sim = sim; list.forEach(n => this.npcs.set(n.id, n)); }
+  observe(id: number) { const n = this.npcs.get(id); if (!n) return; if (this.sleeping) this.wake(); this.observed = n; this.clock.scale = 1; this.hud.toast(`Observation : ${n.prenom} ${n.nom} (Échap pour quitter)`, 3); }
+  stopObserving() { this.observed = null; this.clock.scale = 1; this.hud.prompt(''); }
+  setSpeed(x: number) { this.clock.scale = x; }
+  nearNpc(maxD = 2.8): NpcState | null { let b: NpcState | null = null, bd = maxD; for (const s of this.states.values()) { if (s.kind !== 'marche' && s.kind !== 'dehors') continue; const d = Math.hypot(s.x - this.player.pos.x, s.z - this.player.pos.z); if (d < bd) { bd = d; b = s; } } return b; }
   respawn(penalty: boolean) {
     this.car.pos.set(this.start.x, 0, this.start.z); this.car.heading = this.start.h; this.car.speed = 0;
     this.player.pos.set(this.start.x + Math.cos(this.start.h) * 3, 0, this.start.z - Math.sin(this.start.h) * 3); this.player.heading = this.start.h; this.camYaw = this.start.h; this.mode = 'foot';
@@ -42,6 +50,9 @@ export class Game {
   update(dt: number) {
     const inp = this.input; inp.poll(); const [lx, ly] = inp.takeLook();
     this.camYaw -= lx * 0.0055; this.camPitch = THREE.MathUtils.clamp(this.camPitch + ly * 0.004, -0.15, 1.1);
+    if (this.observed) {   // mode observation : le joueur est spectateur (besoins figés), le temps peut être accéléré
+      if (inp.hit('Escape', 'quit')) this.stopObserving(); this.clock.tick(dt); this.hud.veil(0); this.hud.tick(dt); this.hud.prompt('Échap : quitter l\'observation'); return;
+    }
     this.interior.tick(dt);
     if (this.interior.inside) this.interior.update(dt); else if (this.sleeping) this.updateSleep(dt); else if (this.mode === 'car') this.updateCar(dt); else this.updateFoot(dt);
     if (this.sleeping && !this.interior.inside && Math.random() < dt * 0.02) { this.wake(); this.heat.add(12); this.hud.toast('Du bruit vous réveille : on vous a repéré.'); }
@@ -63,7 +74,7 @@ export class Game {
     const dCar = Math.hypot(this.car.pos.x - p.pos.x, this.car.pos.z - p.pos.z);
     if (inp.hit('KeyE', 'action')) {
       if (dCar < 4.2) { this.mode = 'car'; p.root.visible = false; this.hud.toast('Vous montez dans la voiture.'); }
-      else this.interior.tryEnter();
+      else { const n = this.nearNpc(); if (n) { const npc = this.npcs.get(n.id)!; this.hud.toast(line(npc, n, this.clock.hour, this.talkCount++), 5); } else this.interior.tryEnter(); }
     }
     inp.hit('KeyF', 'steal');
     this.consumables(); this.bodyActions();
@@ -103,6 +114,7 @@ export class Game {
     if (this.interior.busy) { this.hud.prompt(''); return; }
     if (this.mode === 'car') { this.hud.prompt('E : descendre · L : phares'); return; }
     const dCar = Math.hypot(this.car.pos.x - this.player.pos.x, this.car.pos.z - this.player.pos.z); if (dCar < 4.2) { this.hud.prompt('E : monter dans la voiture'); return; }
+    const nn = this.nearNpc(); if (nn) { const npc = this.npcs.get(nn.id)!; this.hud.prompt(npc.minor ? `${npc.prenom} (élève)` : `E : parler à ${npc.prenom} ${npc.nom} · toucher : observer`); return; }
     this.hud.prompt(this.interior.nearDoorPrompt());
   }
 }

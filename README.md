@@ -17,3 +17,10 @@ Tous les bâtiments sont accessibles : E près d'un mur → entrer (ouvert), ou 
 Intérieur généré à la demande par type de lieu (src/interiors/generator.ts, déterministe par graine) ; ce n'est PAS une reproduction du lieu réel, et le jeu l'annonce.
 Interactions : acheter, prendre, manger, boire, fouiller, dormir, toilettes, robinet, coffre. Tests : `npm test`, scénario : `node tools/interiors.cjs <dossier>`.
 Limites : un seul niveau par bâtiment, meubles en volumes simples, pas d'occupants (PNJ) pour l'instant.
+
+## Habitants (phase 4)
+~600 habitants (paramètre `?npc=N`) : identité, domicile (bâtiment réel hors commerce), métier, lieu de travail (POI réel ou hors commune), emploi du temps quotidien déterministe (src/npc/schedule.ts), trajets A* sur le graphe routier avec trottoirs (src/roads/graph.ts).
+La simulation est une fonction pure du temps (src/npc/sim.ts) : les PNJ lointains ne coûtent rien. Rendu : silhouettes instanciées + avatars animés pour les plus proches.
+Mode observation : toucher/cliquer un PNJ (ou touche O), fiche + journal en direct, vitesse ×1/×10/×60 (besoins du joueur figés pendant l'observation). E près d'un PNJ : lui parler.
+Élèves (mineurs) : uniquement école/domicile/parc ; non ciblables, dialogue neutre.
+Limites : un seul modèle de corps/visage (variations de vêtements et de cheveux), PNJ non visibles dans les intérieurs, voitures de PNJ simplifiées (boîtes), pas de collisions PNJ.
