@@ -7,7 +7,7 @@ import type { Pt } from '../world/geom';
 import { unitsForStars, blocksForStars, arrestStep, cooldownRate, ARREST_TIME } from './rules';
 
 interface Unit { v: WVehicle; pts: Pt[]; repath: number; blocked: number; }
-export interface PoliceCtx { px: number; pz: number; pspeed: number; heading: number; inCar: boolean; stars: number; }
+export interface PoliceCtx { px: number; pz: number; pspeed: number; heading: number; inCar: boolean; stars: number; vis?: number; }
 export interface PoliceOut { arrested: boolean; seen: boolean; nearest: number; speeding: boolean; }
 
 /** Gendarmerie : unités lancées à la poursuite (itinéraire A* + poursuite directe de près), barrages en travers de la route, arrestation, refroidissement. */
@@ -41,7 +41,7 @@ export class Police {
       const wb = blocksForStars(ctx.stars); this.blockT -= dt; if (this.blocks.length < wb * 2 && this.blockT <= 0) { this.placeBlock(ctx); this.blockT = 6; }
     } else { this.spawnT -= dt; if (this.units.length && this.spawnT <= 0) { const far = this.units.find(u => Math.hypot(u.v.x - ctx.px, u.v.z - ctx.pz) > 130) ?? this.units[0]; this.dropUnit(far); this.spawnT = 1.5; } if (this.blocks.length) this.clearBlocks(); }
     for (const u of [...this.units]) {
-      const v = u.v, sp = SPECS[v.type]; const dx = ctx.px - v.x, dz = ctx.pz - v.z, d = Math.hypot(dx, dz); this.nearest = Math.min(this.nearest, d); if (d < 95) seen = true;
+      const v = u.v, sp = SPECS[v.type]; const dx = ctx.px - v.x, dz = ctx.pz - v.z, d = Math.hypot(dx, dz); this.nearest = Math.min(this.nearest, d); if (d < 95 * (ctx.vis ?? 1)) seen = true;
       if (v.stun > 0) { v.stun -= dt; v.speed = Math.max(0, v.speed - 10 * dt); continue; }
       u.repath -= dt; if (u.repath <= 0 && d > 40) { u.repath = 1.4; const a = this.graph.nearest(v.x, v.z, 70, true), b = this.graph.nearest(ctx.px, ctx.pz, 160, true); const nodes = a >= 0 && b >= 0 ? this.graph.path(a, b, true) : null; u.pts = nodes ? this.graph.vehPolyline(nodes, 0.1).pts : []; }
       let tx = ctx.px, tz = ctx.pz;
@@ -53,8 +53,8 @@ export class Police {
       if (v.speed < 0.5 && target > 3) u.blocked += dt; else u.blocked = 0; if (u.blocked > 6) { v.h += 0.6; v.speed = -1.5; u.blocked = 0; }
       if (d > 560) this.dropUnit(u);
     }
-    for (const v of this.world.list) if (v.kind === 'patrouille') { const d = Math.hypot(v.x - ctx.px, v.z - ctx.pz); this.nearest = Math.min(this.nearest, d); if (d < 95) seen = true; if (ctx.inCar && ctx.pspeed > 25 && d < 60) { this.speedT -= dt; if (this.speedT <= 0) { speeding = true; this.speedT = 4; } } }
-    for (const b of this.blocks) { const d = Math.hypot(b.x - ctx.px, b.z - ctx.pz); if (d < 95) seen = true; if (d > 750) { this.clearBlocks(); break; } }
+    for (const v of this.world.list) if (v.kind === 'patrouille') { const d = Math.hypot(v.x - ctx.px, v.z - ctx.pz); this.nearest = Math.min(this.nearest, d); if (d < 95 * (ctx.vis ?? 1)) seen = true; if (ctx.inCar && ctx.pspeed > 25 && d < 60) { this.speedT -= dt; if (this.speedT <= 0) { speeding = true; this.speedT = 4; } } }
+    for (const b of this.blocks) { const d = Math.hypot(b.x - ctx.px, b.z - ctx.pz); if (d < 95 * (ctx.vis ?? 1)) seen = true; if (d > 750) { this.clearBlocks(); break; } }
     if (ctx.stars > 0) {
       this.unseen = seen ? 0 : this.unseen + dt; heatValue.value = Math.max(0, heatValue.value - cooldownRate(this.unseen) * dt);
       const prev = this.arrestTimer; this.arrestTimer = arrestStep(this.arrestTimer, ctx.pspeed, this.units.length ? Math.min(...this.units.map(u => Math.hypot(u.v.x - ctx.px, u.v.z - ctx.pz))) : 999, dt); void prev;

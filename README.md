@@ -52,7 +52,7 @@ Mesures (tools/perf.cjs, Chromium headless, 412×915, rendu logiciel — les FPS
 Limites : aucun test sur un vrai téléphone (Xiaomi 14T) ; le son n'a pas pu être écouté dans l'environnement de développement (logique testée, rendu sonore non évalué) ; un seul modèle de corps pour les habitants ; véhicules et bâtiments stylisés.
 
 ## Contrôles (résumé)
-ZQSD/flèches : bouger · Maj : courir · Espace : frein à main · H : klaxon · E : monter/descendre/entrer/parler · 1 manger · 2 boire · R : dormir · X : besoin · L : phares · G : garage · B/N : concession · J : missions · O ou toucher : observer un habitant · M : son · F2 : réglages. Mobile : joystick + boutons, glisser pour regarder.
+ZQSD/flèches : bouger · Maj : courir · C : s’accroupir · F : frapper · T : changer d’objet · V : capuche · Espace : frein à main · H : klaxon · E : monter/descendre/entrer/parler · 1 manger · 2 boire · R : dormir · X : besoin · L : phares · G : garage · B/N : concession · J : missions · O ou toucher : observer un habitant · M : son · F2 : réglages. Mobile : joystick + boutons, glisser pour regarder.
 
 ## Graphisme (passe 2)
 Horizon : massifs stylisés placés selon leurs directions réelles depuis Pontcharra (Belledonne à l'est/sud-est avec neige en altitude, Chartreuse et la falaise du Granier à l'ouest, Bauges au nord, vallée ouverte au NE et au SO), voile atmosphérique, nuages procéduraux animés.
@@ -73,3 +73,11 @@ Piéton : bâtiments, véhicules (garés, circulation, gendarmerie, voitures des
 Circulation : les voitures freinent et s'arrêtent devant le joueur à pied et devant les habitants sur la chaussée (on peut ainsi arrêter une voiture puis la voler avec E).
 Voiture du joueur : bâtiments, mobilier et arbres (dégâts), véhicules, voitures des habitants, habitants (adulte renversé = délit ; un mineur n'est jamais touché, la voiture s'arrête net).
 Scénario de vérification : `node tools/collisions.cjs <dossier>`. Limite : les voitures simulées des habitants ne s'évitent pas entre elles.
+
+## Vague 1 : témoins, discrétion, bagarre
+- **Témoins** : chaque délit (coup, vol, effraction, alarme) est vu (ligne de vue, portée 35 m de jour, 18 m de nuit) ou entendu (rayon selon le bruit) par les habitants adultes proches. Ils n'appellent pas tout de suite : signalement après un délai, icône 📞 au-dessus de ceux qui appellent. Un témoin assommé avant son appel n'appelle pas. Gendarmerie à moins de 80 m : recherche immédiate.
+- **Signalement** : les appels décrivent la tenue (« sweat bleu »), le visage et le véhicule. Plus le signalement est précis, plus les patrouilles vous reconnaissent de loin. Changer de tenue (vol ou achat en boutique de vêtements, garde-robe des logements) et relever la capuche le rendent caduc.
+- **Discrétion** : C pour s'accroupir (plus lent, vu de moins loin) ; accroupi contre une haie, un muret, un arbre ou une voiture garée = caché.
+- **Bagarre** : F pour frapper. La personne s'enfuit, se défend (environ 4 sur 10, si elle est en forme) ou tombe. Un objet contondant dans le dos d'une personne qui ne se méfie pas l'assomme net (≈ 20 s). Objets trouvés en fouillant : bouteille, clé à molette, barre, batte (T pour changer).
+- **Limites** : jamais de mineur visé, ni témoin, ni dans une bagarre ; pas d'animation de coup (élan du corps seulement) ; pas d'arme à feu ; quand un habitant se relève ou cesse de fuir, il reprend son emploi du temps à sa position prévue.
+- Scénario de vérification : `node tools/wave1.cjs <dossier>` (serveur de dev sur le port 5199).

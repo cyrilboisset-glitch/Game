@@ -9,7 +9,7 @@ canvas{display:block}
 .pill{position:absolute;background:rgba(10,14,20,.55);backdrop-filter:blur(6px);padding:6px 12px;border-radius:10px;font-weight:600;font-size:14px}
 #loading{position:fixed;inset:0;background:#10151c;color:#cfd8e3;display:flex;align-items:center;justify-content:center;font-size:18px}
 #bars{right:14px;top:14px;left:auto;width:150px;padding:8px 10px;z-index:2}.bar{display:flex;align-items:center;gap:6px;font-size:11px;margin:3px 0}.bar span{width:46px}.bar i{flex:1;height:7px;background:#0007;border-radius:4px;overflow:hidden}.bar b{display:block;height:100%}.bar.warn span{color:#ff8a7a}
-#minimap{position:fixed;left:14px;top:100px;width:150px;height:150px;border-radius:50%;border:2px solid #fff6;pointer-events:none}
+#minimap{position:fixed;left:14px;top:132px;width:150px;height:150px;border-radius:50%;border:2px solid #fff6;pointer-events:none}
 #veil{position:fixed;inset:0;background:#000;opacity:0;transition:opacity .6s;pointer-events:none}
 #alert{position:fixed;inset:0;pointer-events:none;opacity:0;transition:opacity .4s;box-shadow:inset 0 0 90px 10px rgba(220,30,30,.0)}#alert.on{opacity:1;animation:siren 1s infinite}#alert.on.seen{animation-duration:.5s}@keyframes siren{0%,100%{box-shadow:inset 0 0 120px 14px rgba(230,30,40,.45)}50%{box-shadow:inset 0 0 120px 14px rgba(40,90,255,.5)}}
 #prompt{background:rgba(10,14,20,.7)}.ui{position:fixed;touch-action:none;user-select:none;z-index:5}
@@ -28,5 +28,5 @@ canvas{display:block}
 @media (pointer:coarse){#bars{top:10px}#minimap{top:96px}#info{display:none}}
 </style></head><body>
 <div id="loading">Chargement de Pontcharra…</div>
-<div id="hud"><div class="pill" id="info" style="left:14px;bottom:14px;font-size:11px;opacity:.85">ZQSD : marcher · Maj : courir · E : monter / entrer / interagir · 1 manger · 2 boire · R : dormir · X : besoin · L : phares · glisser : regarder</div><button id="reset" class="pill ui" style="right:14px;top:150px;pointer-events:auto;font-size:11px;border:0;color:#fff">Nouvelle partie</button></div>
+<div id="hud"><div class="pill" id="info" style="left:14px;bottom:14px;font-size:11px;opacity:.85">ZQSD : marcher · Maj : courir · C : s'accroupir · F : frapper · T : objet · V : capuche · E : monter / entrer / interagir · 1 manger · 2 boire · R : dormir · X : besoin · L : phares · glisser : regarder</div><button id="reset" class="pill ui" style="right:14px;top:150px;pointer-events:auto;font-size:11px;border:0;color:#fff">Nouvelle partie</button></div>
 <script type="module" src="/src/main.ts"></script></body></html>

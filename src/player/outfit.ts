@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { SKIN_TINTS, type Look } from '../npc/appearance';
 
-export interface Outfit { hoodie: number; jeans: number; shoes: number; hair: number | null; hood: boolean; }
+export interface Outfit { hoodie: number; jeans: number; shoes: number; hair: number | null; hood: boolean; hoodUp?: boolean; }
 export const PLAYER_OUTFIT: Outfit = { hoodie: 0x3d4f6b, jeans: 0x2f4a7a, shoes: 0xe8e8e8, hair: 0x2a1d14, hood: true };
 
 const fabrics: Record<string, THREE.CanvasTexture> = {};
@@ -47,7 +47,8 @@ export function dress(root: THREE.Object3D, o: Outfit, look?: Look) {
     const m = new THREE.Mesh(geom, mat); m.position.copy(bn.worldToLocal(wp)); m.scale.copy(sc).multiplyScalar(1 / ws); m.castShadow = true; bn.add(m); return m;
   };
   const style = look?.hairStyle ?? 'courts';
-  if (o.hair !== null && style !== 'chauve') {
+  if (o.hoodUp) attach('Head', new THREE.SphereGeometry(0.135, 18, 12, 0, Math.PI * 2, 0, Math.PI * 0.62), new THREE.MeshStandardMaterial({ color: o.hoodie, roughness: 0.9, map: fabric(false), side: THREE.DoubleSide }), new THREE.Vector3(0, 0.1, -0.03), new THREE.Vector3(1.05, 1.08, 1.12));
+  else if (o.hair !== null && style !== 'chauve') {
     const hm = new THREE.MeshStandardMaterial({ color: o.hair, roughness: 0.95 }); const one = new THREE.Vector3(1, 1, 1);
     if (style === 'boucles') attach('Head', new THREE.SphereGeometry(0.138, 18, 14), hm, new THREE.Vector3(0, 0.13, -0.012), new THREE.Vector3(1, 0.88, 1));
     else {

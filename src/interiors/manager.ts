@@ -32,7 +32,7 @@ export class InteriorManager {
     const poi = this.index.poi(e.bi); const st = this.access(e.bi, poi);
     if (st === 'ferme') { this.g.hud.toast('C\'est fermé.'); return true; }
     this.forced = st === 'verrouille'; this.poi = poi;
-    if (this.forced) { this.g.crime(20); const alarm = poi ? Math.random() < 0.35 : Math.random() < 0.15; if (alarm) { this.g.crime(20); this.g.sfx('alarm'); this.g.hud.toast('Porte forcée… ALARME !'); } else { this.g.sfx('glass'); this.g.hud.toast('Vous forcez la porte.'); } }
+    if (this.forced) { this.g.crime(20, 25); const alarm = poi ? Math.random() < 0.35 : Math.random() < 0.15; if (alarm) { this.g.crime(20, 70); this.g.sfx('alarm'); this.g.hud.toast('Porte forcée… ALARME !'); } else { this.g.sfx('glass'); this.g.hud.toast('Vous forcez la porte.'); } }
     this.transition(() => this.enter(e)); return true;
   }
   private transition(fn: () => void) { this.fade = { t: 0.5, fn }; this.g.hud.veil(1); }
@@ -69,6 +69,7 @@ export class InteriorManager {
     return { pos: new THREE.Vector3(t.x, ty, t.z), look: new THREE.Vector3(g.player.pos.x, 1.2, g.player.pos.z) };
   }
   private act(s: Spot) {
+    const sfxOk = () => this.g.sfx('ui');
     const g = this.g, l = this.layout!, hud = g.hud, open = !this.forced, key = this.key(s);
     const once = () => { g.looted.add(key); };
     switch (s.kind) {
@@ -77,12 +78,18 @@ export class InteriorManager {
         if (!open) { if (g.looted.has(key)) return; once(); const m = rr(20, 80); g.money += m; g.crime(10); hud.toast(`Vous vidant la caisse : +${m} €`); break; }
         if (l.kind === 'coiffeur') { if (g.money < 15) return hud.toast('Il vous faut 15 €.'); g.money -= 15; g.heat.value = Math.max(0, g.heat.value - 30); hud.toast('Nouveau look : on vous reconnaîtra moins (−15 €).'); }
         else if (l.kind === 'pharmacie') { if (g.money < 5) return hud.toast('Il vous faut 5 €.'); g.money -= 5; g.needs.s.sante = Math.min(100, g.needs.s.sante + 20); hud.toast('Vous soignez vos blessures (−5 €).'); }
+        else if (['clothes', 'shoes', 'second_hand', 'sports'].includes(this.poi?.sous_type ?? '')) { if (g.money < 25) return hud.toast('Une tenue coûte 25 €.'); g.money -= 25; g.newOutfit(); hud.toast('Nouvelle tenue (−25 €) : on vous reconnaîtra moins.'); }
         else { if (g.money < 5) return hud.toast('Il vous faut 5 €.'); g.money -= 5; g.inv.nourriture++; g.inv.eau++; hud.toast('Achat : 1 repas + 1 eau (−5 €).'); } break;
-      case 'prendre': if (g.looted.has(key)) return; once(); g.inv.nourriture++; if (Math.random() < 0.6) g.inv.eau++;
+      case 'prendre': if (g.looted.has(key)) return; once(); if (['clothes', 'shoes', 'second_hand', 'sports'].includes(this.poi?.sous_type ?? '')) { g.newOutfit(); if (open) g.crime(12, 10); return hud.toast(open ? 'Vous filez avec des vêtements volés sur le dos.' : 'Vous vous servez en vêtements.'); } g.inv.nourriture++; if (Math.random() < 0.6) g.inv.eau++;
         if (open) { g.crime(14); if (Math.random() < 0.4) { g.crime(18); hud.toast('On vous a vu prendre ça !'); } else hud.toast('Vous empochez discrètement.'); } else hud.toast('Vous vous servez.'); break;
       case 'manger': if (!open) { if (g.looted.has(key)) return; once(); g.needs.eat(25); g.crime(5); return hud.toast('Vous grignotez en cuisine.'); } if (g.money < 12) return hud.toast('Il vous faut 12 €.'); g.money -= 12; g.needs.eat(60); g.needs.drink(15); hud.toast('Bon repas (−12 €).'); break;
       case 'boire': if (!open) { if (g.looted.has(key)) return; once(); g.needs.drink(25); g.crime(5); return hud.toast('Vous buvez derrière le bar.'); } if (g.money < 4) return hud.toast('Il vous faut 4 €.'); g.money -= 4; g.needs.drink(35); hud.toast('Une boisson (−4 €).'); break;
-      case 'fouiller': { once(); const r = Math.random(); if (r < 0.4) { const m = rr(5, 35); g.money += m; hud.toast(`Vous trouvez ${m} €.`); } else if (r < 0.65) { g.inv.nourriture++; hud.toast('Vous trouvez de quoi manger.'); } else if (r < 0.85) { g.inv.eau++; hud.toast('Vous trouvez une bouteille d\'eau.'); } else hud.toast('Rien d\'intéressant.'); break; }
+      case 'fouiller': { once();
+        // objets contondants et vêtements selon le lieu
+        const wchance: Record<string, [string, number][]> = { atelier: [['barre', 0.35], ['cle', 0.35]], logement: [['batte', 0.1], ['bouteille', 0.15]], bureau: [['cle', 0.05]], restaurant: [['bouteille', 0.4]], bar: [['bouteille', 0.5]] };
+        for (const [w, p] of wchance[l.kind] ?? []) if (Math.random() < p) { const nouveau = g.giveWeapon(w as never); sfxOk(); return hud.toast(nouveau ? `Vous trouvez : ${w === 'cle' ? 'une clé à molette' : w === 'barre' ? 'une barre de fer' : w === 'batte' ? 'une batte' : 'une bouteille'} (T pour changer d'objet en main).` : 'Rien de plus que ce que vous avez déjà.'); }
+        if (l.kind === 'logement' && s.id === 'arm' && Math.random() < 0.6) { g.newOutfit(); return hud.toast('Vous enfilez d\'autres vêtements : votre signalement ne colle plus.'); }
+        const r = Math.random(); if (r < 0.4) { const m = rr(5, 35); g.money += m; hud.toast(`Vous trouvez ${m} €.`); } else if (r < 0.65) { g.inv.nourriture++; hud.toast('Vous trouvez de quoi manger.'); } else if (r < 0.85) { g.inv.eau++; hud.toast('Vous trouvez une bouteille d\'eau.'); } else hud.toast('Rien d\'intéressant.'); break; }
       case 'coffre': g.sfx('alarm'); if (g.looted.has(key)) return; once(); { const m = rr(250, 700); g.money += m; g.crime(60); if (Math.random() < 0.6) g.crime(30); hud.toast(`Coffre forcé : +${m} € — la gendarmerie sera prévenue.`); } break;
       case 'dormir': g.sleeping = true; hud.toast('Vous vous couchez… (R pour vous réveiller)'); break;
       case 'toilettes': g.needs.relieve(); hud.toast('Soulagé, en toute discrétion.'); break;

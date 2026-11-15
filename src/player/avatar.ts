@@ -18,6 +18,7 @@ export class AvatarInstance {
   }
   set(n: AnimName, speed = 1) { if (n !== this.cur) { const a = this.act[n], b = this.act[this.cur]; a.reset().play(); a.crossFadeFrom(b, 0.25, false); this.cur = n; } this.act.Walk.timeScale = Math.max(0.5, speed / 1.6); this.act.Run.timeScale = Math.max(0.6, speed / 5.2); }
   update(dt: number) { this.mixer.update(dt); for (const b of this.stoopBones) b.rotateX(this.stoop / this.stoopBones.length); }   // dos voûté : appliqué après l'animation
+  bone(name: string) { return this.root.getObjectByName(name); }
   dispose() { this.root.traverse(o => { const m = o as THREE.Mesh; if (m.isMesh) (m.material as THREE.Material).dispose(); }); }
 }
 

@@ -5,7 +5,7 @@ const BARS: [string, string, string][] = [['faim', 'Faim', '#e0a040'], ['soif', 
 export class Hud {
   el = document.getElementById('hud')!; private msgT = 0;
   constructor() {
-    this.el.insertAdjacentHTML('beforeend', `<div id="bars" class="pill"></div><div id="stats" class="pill" style="left:14px;top:56px"></div><div id="prompt" class="pill" style="left:50%;bottom:90px;transform:translateX(-50%);display:none"></div><div id="toast" class="pill" style="left:50%;top:18%;transform:translateX(-50%);display:none"></div><div id="veh" class="pill" style="right:14px;bottom:14px;display:none"></div><div id="alert"></div><div id="tracker"></div><div id="veil"></div><div id="msgbox"></div>`);
+    this.el.insertAdjacentHTML('beforeend', `<div id="bars" class="pill"></div><div id="stats" class="pill" style="left:14px;top:56px"></div><div id="prompt" class="pill" style="left:50%;bottom:90px;transform:translateX(-50%);display:none"></div><div id="toast" class="pill" style="left:50%;top:18%;transform:translateX(-50%);display:none"></div><div id="veh" class="pill" style="right:14px;bottom:14px;display:none"></div><div id="alert"></div><div id="tracker"></div><div id="status" class="pill" style="left:14px;top:98px;font-size:11px;font-weight:500;display:none;max-width:60vw"></div><div id="veil"></div><div id="msgbox"></div>`);
     document.getElementById('bars')!.innerHTML = BARS.map(([k, l, c]) => `<div class="bar"><span>${l}</span><i><b id="b_${k}" style="background:${c}"></b></i></div>`).join('');
   }
   update(n: Needs, heat: Heat, money: number, inv: { nourriture: number; eau: number }, clock: string, day: number) {
@@ -16,6 +16,7 @@ export class Hud {
   /** Alerte gendarmerie : liseré rouge/bleu clignotant (plus vif si on est vu). */
   alert(stars: number, seen: boolean) { const e = document.getElementById('alert')!; e.className = stars ? (seen ? 'on seen' : 'on') : ''; }
   tracker(t: string | null) { const e = document.getElementById('tracker')!; if (!t) { e.style.display = 'none'; return; } e.style.display = 'block'; if (e.dataset.t !== t) { e.innerHTML = t; e.dataset.t = t; } }
+  status(t: string) { const e = document.getElementById('status')!; e.style.display = t ? 'block' : 'none'; if (e.dataset.t !== t) { e.innerHTML = t; e.dataset.t = t; } }
   hideVehicle() { document.getElementById('veh')!.style.display = 'none'; }
   prompt(t: string) { const p = document.getElementById('prompt')!; p.style.display = t ? 'block' : 'none'; p.textContent = t; }
   toast(t: string, s = 3) { const e = document.getElementById('toast')!; e.textContent = t; e.style.display = 'block'; this.msgT = s; }

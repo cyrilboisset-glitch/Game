@@ -14,6 +14,12 @@ import { makeOffers, type Offer, type GenCtx } from './missions/generator';
 import { witnessFactor, fineFor } from './police/rules';
 import { circleVsBox, type PropColliders } from './world/solids';
 import type { VehicleType } from './vehicles/specs';
+import { NpcControl } from './crime/npcControl';
+import { gatherWitnesses, describe as describeWitness, merge, recognizability, sightRange, reportDelay, type Profile } from './crime/perception';
+import { findTarget, isBehind, hitDamage, WEAPONS, type WeaponId } from './crime/combat';
+const COLOR_NAMES: [number, string][] = [[0x3d4f6b, 'bleu'], [0x7a2f2f, 'bordeaux'], [0x2f5a3d, 'vert'], [0x555a63, 'gris'], [0x8a6a2f, 'moutarde'], [0x2a2a2f, 'noir'], [0x6b4a7a, 'violet'], [0x9a9a9a, 'gris clair'], [0x1f3f5f, 'marine'], [0x7f3f1f, 'marron'], [0xe8e8e8, 'blanc'], [0x1c1c1f, 'noir'], [0x8a1c1c, 'rouge'], [0x1f3f78, 'bleu'], [0x4f5358, 'gris'], [0xb9bcc0, 'argent'], [0xc9b06a, 'beige'], [0x7a4a2a, 'marron'], [0xd0d0d0, 'blanc'], [0x2a2a60, 'bleu nuit'], [0xa04a1a, 'orange'], [0xb9b2a0, 'beige'], [0xf2f2f2, 'blanc']];
+const colorName = (h: number) => { let best = 'gris', bd = 1e9; const r = (h >> 16) & 255, g = (h >> 8) & 255, b = h & 255; for (const [c, n] of COLOR_NAMES) { const d = (((c >> 16) & 255) - r) ** 2 + (((c >> 8) & 255) - g) ** 2 + ((c & 255) - b) ** 2; if (d < bd) { bd = d; best = n; } } return best; };
+const HOODIES = [0x3d4f6b, 0x7a2f2f, 0x2f5a3d, 0x555a63, 0x8a6a2f, 0x2a2a2f, 0x6b4a7a, 0x9a9a9a, 0x1f3f5f, 0x7f3f1f], JEANS = [0x2f4a7a, 0x1f2f4f, 0x3a3a40, 0x4a5a7a, 0x20242b, 0x5a4a3a];
 import { Player } from './player/player';
 import { Needs } from './survival/needs';
 import { Heat } from './survival/heat';
@@ -33,7 +39,8 @@ export type Mode = 'foot' | 'car';
 export class Game {
   mode: Mode = 'foot'; sleeping = false; money = 40; inv = { nourriture: 1, eau: 1 }; looted = new Set<string>();
   needs = new Needs(); heat = new Heat(); clock: Clock; coll: Collision;
-  vehicles!: VehicleWorld; traffic!: Traffic; smoke?: Smoke; tireSmoke?: Smoke; fx?: Effects; police?: Police; missions = new Missions(); offers: Offer[] = []; private mbase?: Omit<GenCtx, 'day' | 'rep' | 'at' | 'seed'>; private offerDay = -1; boarded: number | null = null; props?: PropColliders; npcCars: { x: number; z: number; h: number; speed: number; type: VehicleType }[] = []; knocked = new Map<number, { until: number; dx: number; dz: number; h: number }>(); downT = 0; private t = 0; dealerSel = 0; onMissionsKey: () => void = () => {}; sfx: (n: string, v?: number) => void = () => {}; onOffers: () => void = () => {}; private ramT = 0; private speedMsg = 0; interior!: InteriorManager; observed: Npc | null = null; npcs = new Map<number, Npc>(); sim?: NpcSim; states = new Map<number, NpcState>(); talkCount = 0; camYaw = 0; camPitch = 0.28; private saveT = 0; private ctl: Controls = { throttle: 0, brake: 0, steer: 0, handbrake: false };
+  vehicles!: VehicleWorld; traffic!: Traffic; smoke?: Smoke; tireSmoke?: Smoke; fx?: Effects; police?: Police; missions = new Missions(); offers: Offer[] = []; private mbase?: Omit<GenCtx, 'day' | 'rep' | 'at' | 'seed'>; private offerDay = -1; boarded: number | null = null; props?: PropColliders; npcCars: { x: number; z: number; h: number; speed: number; type: VehicleType }[] = []; npcCtl = new NpcControl(); reports: { witness: number; due: number; v: number; desc: Profile }[] = []; profile: Profile = { outfit: null, vehicle: null, face: false };
+  crouch = false; hidden = false; night = false; weapons = new Set<WeaponId>(['poings']); weapon: WeaponId = 'poings'; private attackCd = 0; downT = 0; private t = 0; vis = 1; dealerSel = 0; onMissionsKey: () => void = () => {}; sfx: (n: string, v?: number) => void = () => {}; onOffers: () => void = () => {}; private ramT = 0; private speedMsg = 0; interior!: InteriorManager; observed: Npc | null = null; npcs = new Map<number, Npc>(); sim?: NpcSim; states = new Map<number, NpcState>(); talkCount = 0; camYaw = 0; camPitch = 0.28; private saveT = 0; private ctl: Controls = { throttle: 0, brake: 0, steer: 0, handbrake: false };
   constructor(public world: WorldData, public pois: Poi[], public car: Car, public player: Player, public input: Input, public hud: Hud, startHour: number, private start: { x: number; z: number; h: number }, scene: THREE.Scene) {
     this.clock = new Clock(startHour); this.coll = new Collision(world.builds); this.respawn(false);
     this.interior = new InteriorManager(this, new BuildingIndex(world.builds, pois), scene);
@@ -48,10 +55,21 @@ export class Game {
     if (includeOwn) out.push({ x: this.car.pos.x, z: this.car.pos.z, h: this.car.heading, hl: this.car.spec.L / 2, hw: this.car.spec.W / 2, speed: this.car.speed });
     return out;
   }
+  outfitId() { return `sweat ${colorName(this.player.outfit.hoodie)}`; }
+  vehicleId() { return this.mode === 'car' ? `${this.car.spec.nom.toLowerCase()} ${colorName(this.car.paint)}` : null; }
+  get hooded() { return !!this.player.outfit.hoodUp; }
+  /** Nouvelle tenue (armoire, boutique de vêtements) : couleurs différentes = signalement périmé. */
+  newOutfit(): string { const o = this.player.outfit; let h = o.hoodie; while (h === o.hoodie) h = HOODIES[Math.floor(Math.random() * HOODIES.length)]; this.player.setOutfit({ ...o, hoodie: h, jeans: JEANS[Math.floor(Math.random() * JEANS.length)] }); this.applyWeapon(); return this.outfitId(); }
+  giveWeapon(w: WeaponId) { const had = this.weapons.has(w); this.weapons.add(w); if (WEAPONS[w].dmg[1] > WEAPONS[this.weapon].dmg[1]) { this.weapon = w; this.applyWeapon(); } return !had; }
+  private applyWeapon() { const W = WEAPONS[this.weapon]; this.player.setWeapon(this.weapon === 'poings' ? null : W.color, W.len); }
   /** Habitants à pied (renversés exclus) près d'un point. */
-  walkersNear(x: number, z: number, r: number) { const out: { id: number; x: number; z: number; h: number; speed: number; minor: boolean }[] = []; for (const s of this.states.values()) { if ((s.kind !== 'marche' && s.kind !== 'dehors') || this.knocked.has(s.id)) continue; if (Math.abs(s.x - x) > r || Math.abs(s.z - z) > r) continue; out.push({ id: s.id, x: s.x, z: s.z, h: s.h, speed: s.speed, minor: this.npcs.get(s.id)?.minor ?? false }); } return out; }
+  walkersNear(x: number, z: number, r: number) { const out: { id: number; x: number; z: number; h: number; speed: number; minor: boolean }[] = []; for (const s of this.states.values()) { const c = this.npcCtl.get(s.id); if (c) { if (c.mode === 'ko' || Math.abs(c.x - x) > r || Math.abs(c.z - z) > r) continue; out.push({ id: s.id, x: c.x, z: c.z, h: c.h, speed: c.speed, minor: false }); continue; } if (s.kind !== 'marche' && s.kind !== 'dehors') continue; if (Math.abs(s.x - x) > r || Math.abs(s.z - z) > r) continue; out.push({ id: s.id, x: s.x, z: s.z, h: s.h, speed: s.speed, minor: this.npcs.get(s.id)?.minor ?? false }); } return out; }
   /** Renverse un habitant (adulte) : il reste au sol quelques secondes, décalé dans la direction du choc. */
-  knock(id: number, dx: number, dz: number, h: number) { this.knocked.set(id, { until: this.t + 6, dx, dz, h }); }
+  knock(id: number, dx: number, dz: number, h: number) { const s = this.states.get(id); if (s) this.npcCtl.ko(id, s.x + dx, s.z + dz, h, 20); }
+  /** Positions des habitants pris en main (pour le rendu). */
+  overrides() { const m = new Map<number, { x: number; z: number; h: number; lying: boolean; speed: number }>(); for (const c of this.npcCtl.map.values()) m.set(c.id, { x: c.x, z: c.z, h: c.h, lying: c.mode === 'ko', speed: c.speed }); return m; }
+  /** Témoins qui sont en train d'appeler (pour l'icône au-dessus de leur tête). */
+  callers() { return this.reports.map(r => r.witness); }
   /** Collisions du piéton : bâtiments, mobilier/végétation, véhicules (renversé si l'un d'eux arrive vite), habitants. */
   private footCollide() {
     const p = this.player, pos = p.pos as unknown as { x: number; z: number }; if (this.props) this.props.resolve(pos, p.radius);
@@ -63,10 +81,30 @@ export class Game {
     this.coll.resolve(pos, p.radius);
   }
   /** Délit : n'est comptabilisé qu'en proportion de ce qui a été vu (gendarmerie à portée, témoin, personne). */
-  crime(v: number) {
-    let npcD: number | null = null; const px = this.pos.x, pz = this.pos.z;
-    for (const s of this.states.values()) { if (s.kind === 'dedans' || s.kind === 'absent') continue; const d = Math.hypot(s.x - px, s.z - pz); if (d < (npcD ?? 1e9)) npcD = d; }
-    const pd = this.police ? this.police.nearest : 999; this.heat.add(v * witnessFactor(pd < 999 ? pd : null, npcD));
+  crime(v: number, noise = 15) {
+    const px = this.pos.x, pz = this.pos.z; const pd = this.police ? this.police.nearest : 999;
+    if (pd < 80 * Math.max(0.3, this.vis)) { this.heat.add(v); this.profile = merge(this.profile, { outfit: this.mode === 'foot' ? this.outfitId() : null, vehicle: this.vehicleId(), face: !this.hooded }); return; }   // vu par la gendarmerie : immédiat
+    const cands: { id: number; x: number; z: number; minor: boolean }[] = [];
+    for (const s of this.states.values()) { const c = this.npcCtl.get(s.id); if (c) { if (c.mode !== 'ko') cands.push({ id: s.id, x: c.x, z: c.z, minor: false }); continue; } if (s.kind === 'dedans' || s.kind === 'absent') continue; if (Math.abs(s.x - px) > 60 || Math.abs(s.z - pz) > 60) continue; cands.push({ id: s.id, x: s.x, z: s.z, minor: this.npcs.get(s.id)?.minor ?? false }); }
+    const ws = gatherWitnesses(px, pz, cands, sightRange(this.night, this.crouch, this.hidden), noise, (a, b2, c2, d) => this.coll.blocked(a, b2, c2, d));
+    if (!ws.length) { this.heat.add(v * 0.15); return; }
+    ws.forEach((w, i) => { if (this.reports.some(r => r.witness === w.id)) return; this.reports.push({ witness: w.id, due: this.t + reportDelay(Math.random(), w.seen), v: i === 0 ? v * (w.seen ? 0.7 : 0.4) : v * 0.12, desc: describeWitness(w, this.outfitId(), this.vehicleId(), this.hooded) }); });
+    this.hud.toast(ws.some(w => w.seen) ? `Vu par ${ws.length} témoin${ws.length > 1 ? 's' : ''}${ws.length > 1 ? ' : ils vont' : ' : il va'} appeler la gendarmerie.` : 'Quelqu\'un a entendu…', 2.5);
+  }
+  /** Appels des témoins arrivés à échéance (un témoin assommé n'appelle pas). */
+  private processReports() {
+    let called = 0; this.reports = this.reports.filter(r => { if (r.due > this.t) return true; const c = this.npcCtl.get(r.witness); if (c && c.mode === 'ko') return false; this.heat.add(r.v); this.profile = merge(this.profile, r.desc); called++; return false; });
+    if (called) this.hud.toast(`📞 Un témoin a appelé la gendarmerie${this.profile.outfit || this.profile.vehicle ? ' et vous décrit' : ''}.`, 3);
+    if (this.heat.value <= 0) this.profile = { outfit: null, vehicle: null, face: false };
+  }
+  /** Coup (F) : poings ou objet ; dans le dos d'une personne qui ne se méfie pas, un objet l'assomme net. */
+  private attack() {
+    if (this.attackCd > 0 || this.mode !== 'foot' || this.downT > 0) return; const W = WEAPONS[this.weapon]; this.attackCd = W.cd; this.player.punch();
+    const p = this.player; const list = this.walkersNear(p.pos.x, p.pos.z, 3); const t = findTarget(p.pos.x, p.pos.z, p.heading, list, W.range); if (!t) { this.sfx('ui'); return; }
+    const behind = isBehind(p.pos.x, p.pos.z, t), unaware = !this.npcCtl.get(t.id); const r = hitDamage(this.weapon, behind, unaware, Math.random()); const npc = this.npcs.get(t.id)!;
+    const mode = this.npcCtl.hit(t.id, t.x, t.z, t.h, r.dmg, npc.seed, this.weapon !== 'poings'); this.sfx('crash', 0.25); if (this.fx) this.fx.shake = Math.min(1, this.fx.shake + 0.15);
+    this.hud.toast(mode === 'ko' ? (r.ko ? `${npc.prenom} est assommé${npc.genre === 'F' ? 'e' : ''}.` : `${npc.prenom} est à terre.`) : mode === 'combat' ? `${npc.prenom} se défend !` : `${npc.prenom} s'enfuit en criant.`, 2);
+    this.crime(mode === 'ko' && r.ko ? 10 : 16, mode === 'ko' && r.ko ? 6 : 22);
   }
   /** Arrestation : amende, perte de la marchandise (inventaire), retour devant la gendarmerie, trois heures perdues. Pas de mort. */
   private arrest() {
@@ -110,7 +148,7 @@ export class Game {
       const fx = Math.sin(this.camYaw), fz = Math.cos(this.camYaw); this.vehicles.add({ type: t, paint: [0xe8e8e8, 0x1f3f78, 0x8a1c1c, 0x2f5a3d, 0x4f5358][this.dealerSel % 5], hp: sp.hp, x: this.pos.x + fx * 5, z: this.pos.z + fz * 5, h: this.camYaw, speed: 0, kind: 'gare', mine: true, upgrade: 0, stun: 0 }); this.hud.toast(`${sp.nom} achetée (−${sp.prix} €) : elle vous attend devant.`, 4); }
   }
   private policeUpdate(dt: number) {
-    if (this.ramT > 0) this.ramT -= dt; if (!this.police) return; const inCar = this.mode === 'car'; const out = this.police.update(dt, { px: this.pos.x, pz: this.pos.z, pspeed: inCar ? Math.abs(this.car.speed) : this.player.speed, heading: this.car.heading, inCar, stars: this.heat.stars }, this.heat);
+    if (this.ramT > 0) this.ramT -= dt; if (!this.police) return; const inCar = this.mode === 'car'; const out = this.police.update(dt, { px: this.pos.x, pz: this.pos.z, pspeed: inCar ? Math.abs(this.car.speed) : this.player.speed, heading: this.car.heading, inCar, stars: this.heat.stars, vis: this.vis }, this.heat);
     if (out.speeding) { this.crime(8); this.hud.toast('Excès de vitesse repéré par une patrouille !', 2.5); }
     this.hud.alert(this.heat.stars, out.seen); if (out.arrested) this.arrest();
   }
@@ -122,7 +160,7 @@ export class Game {
     if (v.kind !== 'gare' && Math.abs(v.speed) > 2) { this.hud.toast('Il roule trop vite pour monter.'); return false; }
     if (!v.mine) {
       if (v.kind === 'trafic') { this.crime(35); this.hud.toast(`Vous arrachez le conducteur de sa ${sp.nom.toLowerCase()} !`); }
-      else { this.crime(14); if (Math.random() < 0.25) { this.crime(12); this.sfx('alarm'); this.hud.toast('L\'alarme se déclenche !'); } else this.hud.toast(`Vous forcez la ${sp.nom.toLowerCase()}.`); }
+      else { this.crime(14); if (Math.random() < 0.25) { this.crime(12, 60); this.sfx('alarm'); this.hud.toast('L\'alarme se déclenche !'); } else this.hud.toast(`Vous forcez la ${sp.nom.toLowerCase()}.`); }
     } else this.hud.toast(`Vous montez dans votre ${sp.nom.toLowerCase()}.`);
     this.sfx('door'); if (v.kind === 'trafic') this.traffic.release(v); this.vehicles.remove(v);
     const c = this.car; this.vehicles.add({ type: c.spec.type, paint: c.paint, hp: c.hp, x: c.pos.x, z: c.pos.z, h: c.heading, speed: 0, kind: 'gare', mine: true, upgrade: c.upgrade, stun: 0 });
@@ -157,13 +195,20 @@ export class Game {
   dow() { return (this.clock.day - 1 + 2) % 7; } // le jour 1 est un mercredi (hypothèse)
 
   update(dt: number) {
+    dt = Math.max(0, dt);
     const inp = this.input; inp.poll(); const [lx, ly] = inp.takeLook();
     this.camYaw -= lx * 0.0055; this.camPitch = THREE.MathUtils.clamp(this.camPitch + ly * 0.004, -0.15, 1.1);
     if (this.observed) {   // mode observation : le joueur est spectateur (besoins figés), le temps peut être accéléré
       if (inp.hit('Escape', 'quit')) this.stopObserving(); this.clock.tick(dt); this.hud.veil(0); this.hud.tick(dt); this.hud.prompt('Échap : quitter l\'observation'); return;
     }
     this.interior.tick(dt);
-    this.t += dt; for (const [id, k] of this.knocked) if (k.until < this.t) this.knocked.delete(id);
+    this.t += dt; this.attackCd -= dt; this.processReports();
+    { const r = this.npcCtl.update(dt, this.player.pos.x, this.player.pos.z, this.props ? { resolve: (q: { x: number; z: number }, rr: number) => { this.props!.resolve(q, rr); this.coll.resolve(q, rr); } } : undefined);
+      if (r.dmgToPlayer && this.mode === 'foot' && !this.interior.inside) { this.needs.s.sante = Math.max(0, this.needs.s.sante - r.dmgToPlayer); this.sfx('crash', 0.2); if (this.fx) this.fx.shake = Math.min(1, this.fx.shake + 0.3); }
+      for (const id of r.woke) { const c = this.npcCtl.get(id); if (c && !this.reports.some(q => q.witness === id)) this.reports.push({ witness: id, due: this.t + 6, v: 12, desc: { outfit: this.outfitId(), vehicle: null, face: !this.hooded } }); } }
+    // discrétion : caché = accroupi contre un obstacle (haie, arbre, poubelle, voiture garée)
+    this.hidden = this.mode === 'foot' && this.crouch && ((this.props?.nearDist(this.player.pos.x, this.player.pos.z) ?? 9) < 1.25 || this.vehicles.near(this.player.pos.x, this.player.pos.z, 2.6).some(v => v.kind === 'gare'));
+    this.vis = recognizability({ stars: this.heat.stars, profile: this.profile, outfit: this.outfitId(), vehicle: this.vehicleId(), hooded: this.hooded, hidden: this.hidden, crouch: this.crouch && this.mode === 'foot' });
     if (this.interior.inside) this.interior.update(dt); else if (this.sleeping) this.updateSleep(dt); else if (this.mode === 'car') this.updateCar(dt); else this.updateFoot(dt);
     if (this.sleeping && !this.interior.inside && Math.random() < dt * 0.02) { this.wake(); this.crime(12); this.hud.toast('Du bruit vous réveille : on vous a repéré.'); }
     if (this.sleeping && (inp.hit('KeyR', 'sleep') || this.needs.s.energie >= 98)) this.wake();
@@ -179,7 +224,7 @@ export class Game {
   private updateSleep(dt: number) { this.clock.scale = 12; this.car.update(dt, { throttle: 0, brake: 0, steer: 0, handbrake: true }); }
   private updateFoot(dt: number) {
     const inp = this.input, p = this.player;
-    if (this.downT > 0) { this.downT -= dt; p.update(dt, 0, 0, this.camYaw, false, 1); } else p.update(dt, inp.x, inp.y, this.camYaw, inp.run, this.needs.speedFactor);
+    if (this.downT > 0) { this.downT -= dt; p.update(dt, 0, 0, this.camYaw, false, 1); } else p.update(dt, inp.x, inp.y, this.camYaw, inp.run && !this.crouch, this.needs.speedFactor * (this.crouch ? 0.45 : 1));
     this.coll.resolve(p.pos as any, p.radius); this.footCollide();
     p.root.rotation.order = 'YXZ'; p.root.rotation.x = this.downT > 0 ? -Math.PI / 2 * Math.min(1, (2.5 - this.downT) * 6, this.downT * 3) : 0;
     p.root.position.copy(p.pos); this.car.update(dt, { throttle: 0, brake: 0, steer: 0, handbrake: true }); this.collideCar();
@@ -189,7 +234,10 @@ export class Game {
       else if (this.nearestVehicle()) { const v = this.nearestVehicle()!; if (this.enterWorldVehicle(v)) { this.mode = 'car'; p.root.visible = false; } }
       else { const n = this.nearNpc(); if (n) { const npc = this.npcs.get(n.id)!; this.hud.toast(line(npc, n, this.clock.hour, this.talkCount++), 5); } else this.interior.tryEnter(); }
     }
-    inp.hit('KeyF', 'steal');
+    if (inp.hit('KeyF', 'hit')) this.attack();
+    if (inp.hit('KeyC', 'crouch')) { this.crouch = !this.crouch; this.player.crouch = this.crouch; }
+    if (inp.hit('KeyV', 'hood')) { this.player.setOutfit({ ...this.player.outfit, hoodUp: !this.player.outfit.hoodUp }); this.applyWeapon(); this.hud.toast(this.hooded ? 'Capuche levée : visage caché.' : 'Capuche baissée.', 1.5); }
+    if (inp.hit('KeyT', 'weapon')) { const list = [...this.weapons]; this.weapon = list[(list.indexOf(this.weapon) + 1) % list.length]; this.applyWeapon(); this.hud.toast(`En main : ${WEAPONS[this.weapon].nom}`, 1.5); }
     this.consumables(); this.bodyActions();
   }
   private updateCar(dt: number) {

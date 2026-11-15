@@ -11,6 +11,8 @@ export class PropColliders {
   private chunks = new Map<string, Sink>();
   set(key: string, s: Sink) { this.chunks.set(key, s); }
   remove(key: string) { this.chunks.delete(key); }
+  /** Distance au plus proche obstacle (pour se cacher). */
+  nearDist(x: number, z: number) { let best = 99; const cx = Math.floor(x / CHUNK), cz = Math.floor(z / CHUNK); for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) { const s = this.chunks.get(`${cx + dx},${cz + dz}`); if (!s) continue; for (let i = 0; i < s.c.length; i += 3) { if (Math.abs(x - s.c[i]) > 4 || Math.abs(z - s.c[i + 1]) > 4) continue; best = Math.min(best, Math.hypot(x - s.c[i], z - s.c[i + 1]) - s.c[i + 2]); } for (let i = 0; i < s.s.length; i += 5) { const ax = s.s[i], az = s.s[i + 1], ex = s.s[i + 2] - ax, ez = s.s[i + 3] - az, l2 = ex * ex + ez * ez || 1; const k = Math.max(0, Math.min(1, ((x - ax) * ex + (z - az) * ez) / l2)); best = Math.min(best, Math.hypot(x - ax - ex * k, z - az - ez * k) - s.s[i + 4]); } } return best; }
   /** Repousse un cercle hors des troncs, poteaux, bancs, haies, murets. */
   resolve(pos: { x: number; z: number }, r: number) {
     let depth = 0, nx = 0, nz = 0; const cx = Math.floor(pos.x / CHUNK), cz = Math.floor(pos.z / CHUNK);

@@ -80,7 +80,9 @@ mpanel.onAccept = o => game.startOffer(o); mpanel.onAbandon = () => { game.missi
 game.attachMissions({ commerces: spotsOf(['supermarket', 'bakery', 'butcher', 'greengrocer', 'pastry', 'variety_store', 'clothes', 'florist', 'books', 'convenience']), bureaux: spotsOf(['bank', 'estate_agent', 'employment_agency', 'insurance', 'lawyer', 'townhall', 'government', 'accountant', 'company']), neutres, nodes });
 const beacon = new THREE.Group(); { const m = new THREE.MeshBasicMaterial({ color: 0xffd34a, transparent: true, opacity: 0.28, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false }); beacon.add(new THREE.Mesh(new THREE.CylinderGeometry(1.3, 1.3, 70, 20, 1, true).translate(0, 35, 0), m), new THREE.Mesh(new THREE.RingGeometry(1.6, 2.4, 28).rotateX(-Math.PI / 2).translate(0, 0.25, 0), new THREE.MeshBasicMaterial({ color: 0xffd34a, transparent: true, opacity: 0.8, depthWrite: false, fog: false }))); beacon.visible = false; scene.add(beacon); }
 // audio, qualité, réglages
-const grass = new GrassField(scene, chunks.mask!); const audio = new AudioSys(); const settings = new Settings(); const touchDev = matchMedia('(pointer: coarse)').matches;
+const grass = new GrassField(scene, chunks.mask!);
+const phoneTex = (() => { const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d')!; g.fillStyle = 'rgba(200,30,30,0.92)'; g.beginPath(); g.arc(32, 32, 28, 0, 7); g.fill(); g.font = '34px system-ui'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('📞', 32, 35); return new THREE.CanvasTexture(c); })();
+const phones: THREE.Sprite[] = []; for (let i = 0; i < 6; i++) { const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: phoneTex, depthTest: false, transparent: true, sizeAttenuation: false })); sp.scale.setScalar(0.045); sp.visible = false; sp.renderOrder = 10; scene.add(sp); phones.push(sp); } const audio = new AudioSys(); const settings = new Settings(); const touchDev = matchMedia('(pointer: coarse)').matches;
 const quality = new AutoQuality(touchDev ? 'moyen' : 'eleve'); game.sfx = (n, v) => audio.sfx(n, v);
 function applyQuality(l: Level) {
   const p = levelParams(l); renderer.setPixelRatio(p.pixelRatio); renderer.setSize(innerWidth, innerHeight); post.setLevel(l === 'bas' ? 'aucun' : l === 'moyen' ? 'moyen' : 'eleve'); post.setSize(innerWidth, innerHeight);
@@ -135,19 +137,22 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
 (window as any).__game = { setQuality: (l: Level) => { quality.auto = false; quality.set(l); applyQuality(l); }, police, traffic, vworld, npcRender, npcStats: () => ({ ...npcRender.stats(), vehicules: vrender.count(), circulation: traffic.cars.length, garees: vworld.list.filter(v => v.kind === 'gare').length, habitants: npcs.length, majEtatsMs: +statesMs.toFixed(1) }), sync: () => { chunks.update(game.pos.x, game.pos.z, VIEW); signs.update(game.pos.x, game.pos.z); snap = true; placeCamera(0); }, game, car, player, camera, renderer, stats: () => ({ fps, calls: renderer.info.render.calls, tris: renderer.info.render.triangles, chunks: chunks.loaded.size }) };
 
 function frame(now: number) {
-  const dt = Math.min(0.05, (now - last) / 1000); last = now; acc += dt;
+  const dt = Math.max(0, Math.min(0.05, (now - last) / 1000)); last = now; acc += dt;
   game.update(dt); const os = game.observed ? game.states.get(game.observed.id) : null; const fx = os ? os.x : game.pos.x, fz = os ? os.z : game.pos.z;
   chunks.update(fx, fz, VIEW); signs.update(fx, fz); updateStates(now, fx, fz); placeCamera(dt);
-  if (!game.interior.inside) npcRender.update(dt, statesArr, fx, fz, game.observed?.id ?? null, now, game.clock.scale, game.knocked); if (game.observed && os) panel.update(game.observed, os, sim, game.clock.day, game.clock.hour, now, game.clock.scale); else if (panel.el.style.display !== 'none') panel.show(false);
+  if (!game.interior.inside) npcRender.update(dt, statesArr, fx, fz, game.observed?.id ?? null, now, game.clock.scale, game.overrides()); if (game.observed && os) panel.update(game.observed, os, sim, game.clock.day, game.clock.hour, now, game.clock.scale); else if (panel.el.style.display !== 'none') panel.show(false);
   const lv = quality.update(dt); if (lv) applyQuality(lv);
   vrender.begin(); const flashOn = Math.floor(now / 280) % 2 ? 1 : 0.2;
   for (const v of vworld.list) { if (Math.abs(v.x - fx) > VEH_RANGE || Math.abs(v.z - fz) > VEH_RANGE) continue; vrender.add(v.type, v.paint, v.x, v.z, v.h, SPECS[v.type].police && (v.kind === 'patrouille' || v.kind === 'poursuite' || (v.kind === 'gare' && game.heat.stars > 0)) ? flashOn : 1, v.hp / SPECS[v.type].hp); }
   game.npcCars = []; for (const d of npcRender.drivers) { const n = game.npcs.get(d.id)!; const t = n.seed % 9 === 0 ? 'utilitaire' : CIVIL_TYPES[n.seed % CIVIL_TYPES.length]; vrender.add(t, PAINTS[(n.seed >> 3) % PAINTS.length], d.x, d.z, d.h); game.npcCars.push({ x: d.x, z: d.z, h: d.h, speed: d.speed, type: t }); }
   vrender.end(); car.setFlash(false);
   if (game.mode === 'car') hud.vehicle(car.spec.nom, Math.round(Math.abs(car.speed) * 3.6), Math.round(car.hp / car.spec.hp * 100), car.upgrade); else hud.hideVehicle();
-  const { night, sunset } = env.set(game.clock.hour, os ? new THREE.Vector3(os.x, 0, os.z) : game.pos); if (game.interior.inside) renderer.toneMappingExposure = 0.95;
+  const { night, sunset } = env.set(game.clock.hour, os ? new THREE.Vector3(os.x, 0, os.z) : game.pos); if (game.interior.inside) renderer.toneMappingExposure = 0.95; game.night = night > 0.5;
   if (night > 0.2 && !car.lightsOn && !car.headlights[0].intensity) car.setLights(true); if (night <= 0.2 && car.lightsOn) car.setLights(false);
   if (night > 0.2) { const near = chunks.lamps.filter(l => Math.hypot(l.x - game.pos.x, l.z - game.pos.z) < 90).sort((p, q2) => p.distanceToSquared(game.pos) - q2.distanceToSquared(game.pos)); lampLights.forEach((l, i) => { const p = near[i]; l.intensity = p ? 140 : 0; if (p) l.position.set(p.x, 6.6, p.z); }); } else lampLights.forEach(l => (l.intensity = 0));
+  { const ids = game.callers(); phones.forEach((sp, i) => { const id = ids[i]; const s0 = id !== undefined ? (game.npcCtl.get(id) ?? game.states.get(id)) : null; sp.visible = !!s0 && !game.interior.inside; if (s0) sp.position.set(s0.x, 2.4 + Math.sin(now * 0.008) * 0.08, s0.z); }); }
+  { const st: string[] = []; if (game.mode === 'foot') { if (game.crouch) st.push(game.hidden ? '🌿 Caché' : '🧎 Accroupi'); if (game.hooded) st.push('Capuche'); if (game.weapon !== 'poings') st.push(`🔨 ${({ bouteille: 'Bouteille', cle: 'Clé', barre: 'Barre', batte: 'Batte' } as Record<string, string>)[game.weapon]}`); }
+    const p = game.profile; const sig = [p.outfit, p.vehicle, p.face ? 'visage' : null].filter(Boolean).join(' · '); if (game.heat.value > 0 && sig) st.push(`Signalement : ${sig}`); if (game.reports.length) st.push(`📞 ${game.reports.length} témoin${game.reports.length > 1 ? 's' : ''}`); hud.status(st.join(' · ')); }
   grass.update(dt, fx, fz); if (mats.water.normalMap) { mats.water.normalMap.offset.x += dt * 0.012; mats.water.normalMap.offset.y += dt * 0.007; }
   if (now - lastShadow > 700) { lastShadow = now; chunks.setShadowRange(fx, fz, shadowRange); }
   renderer.info.autoReset = false; renderer.info.reset();

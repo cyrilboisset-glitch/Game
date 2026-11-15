@@ -20,8 +20,8 @@ export class NpcRenderer {
     mk(box(0.13, 0.6, 0.14, -0.28), -0.32, 1.48, 0, 'brasG'); mk(box(0.13, 0.6, 0.14, -0.28), 0.32, 1.48, 0, 'brasD'); mk(new THREE.SphereGeometry(0.115, 10, 8).translate(0, 1.67, 0), 0, 0, 0, 'tete');
     mk(new THREE.SphereGeometry(0.125, 10, 6, 0, Math.PI * 2, 0, Math.PI * 0.55).translate(0, 1.69, -0.005), 0, 0, 0, 'cheveux'); mk(new THREE.CylinderGeometry(0.2, 0.3, 0.46, 10, 1, true).translate(0, 0.72, 0), 0, 0, 0, 'jupe');
   }
-  update(dt: number, states: NpcState[], fx: number, fz: number, selectedId: number | null, now: number, timeScale = 1, knocked?: Map<number, { dx: number; dz: number; h: number }>) {
-    if (knocked && knocked.size) states = states.map(s0 => { const k = knocked.get(s0.id); return k ? { ...s0, x: s0.x + k.dx, z: s0.z + k.dz, h: k.h, speed: 0, kind: 'dehors' as const } : s0; });
+  update(dt: number, states: NpcState[], fx: number, fz: number, selectedId: number | null, now: number, timeScale = 1, over?: Map<number, { x: number; z: number; h: number; lying: boolean; speed: number }>) {
+    const knocked = new Set<number>(); if (over && over.size) states = states.map(s0 => { const k = over.get(s0.id); if (!k) return s0; if (k.lying) knocked.add(s0.id); return { ...s0, x: k.x, z: k.z, h: k.h, speed: k.speed, kind: (k.speed > 0.4 ? 'marche' : 'dehors') as NpcState['kind'] }; });
     const near = states.filter(s => (s.kind === 'marche' || s.kind === 'dehors' || s.kind === 'conduit') && (Math.hypot(s.x - fx, s.z - fz) < this.limits.range || s.id === selectedId));
     near.sort((a, b) => Math.hypot(a.x - fx, a.z - fz) - Math.hypot(b.x - fx, b.z - fz));
     this.visible = []; this.drivers = []; let ped = 0; const wantAvatar = new Set<number>(); let na = 0;
@@ -32,10 +32,10 @@ export class NpcRenderer {
       if (s.kind === 'conduit') { this.drivers.push(s); continue; }
       if (wantAvatar.has(s.id)) {
         let a = this.avatars.get(s.id); if (!a) { a = { av: this.factory.create(n.outfit, n.look), t: 0 }; this.scene.add(a.av.root); this.avatars.set(s.id, a); }
-        a.av.root.position.set(s.x, 0, s.z); a.av.root.rotation.order = 'YXZ'; a.av.root.rotation.y = s.h; const lying = !!knocked?.has(s.id); a.av.root.rotation.x = lying ? -Math.PI / 2 : 0; a.av.root.position.y = lying ? 0.12 : 0; const sp = knocked?.has(s.id) ? 0 : s.kind === 'dehors' ? 0.9 : Math.min(s.speed * Math.min(timeScale, 4), 6.5); a.av.set(sp > 3.5 ? 'Run' : sp > 0.4 ? 'Walk' : 'Idle', sp); a.av.update(dt); continue;
+        a.av.root.position.set(s.x, 0, s.z); a.av.root.rotation.order = 'YXZ'; a.av.root.rotation.y = s.h; const lying = knocked.has(s.id); a.av.root.rotation.x = lying ? -Math.PI / 2 : 0; a.av.root.position.y = lying ? 0.12 : 0; const sp = knocked.has(s.id) ? 0 : s.kind === 'dehors' ? 0.9 : Math.min(s.speed * Math.min(timeScale, 4), 6.5); a.av.set(sp > 3.5 ? 'Run' : sp > 0.4 ? 'Walk' : 'Idle', sp); a.av.update(dt); continue;
       }
       if (ped >= Math.min(MAX_PED, this.limits.pedMax)) continue; const phase = now * 0.0075 * Math.max(0.8, Math.min(s.speed * Math.min(timeScale, 4), 6.5)) + n.seed; const sw = Math.sin(phase) * (s.speed > 0.3 ? 0.55 : 0); const bob = Math.abs(Math.cos(phase)) * 0.025 * (s.speed > 0.3 ? 1 : 0);
-      this.q.setFromAxisAngle(this.v.set(0, 1, 0), s.h); if (knocked?.has(s.id)) this.q.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2)); const base = new THREE.Matrix4().compose(this.v.set(s.x, knocked?.has(s.id) ? 0.15 : bob, s.z), this.q, this.one);
+      this.q.setFromAxisAngle(this.v.set(0, 1, 0), s.h); if (knocked.has(s.id)) this.q.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2)); const base = new THREE.Matrix4().compose(this.v.set(s.x, knocked.has(s.id) ? 0.15 : bob, s.z), this.q, this.one);
       const hoodie = new THREE.Color(n.outfit.hoodie), jeans = new THREE.Color(n.outfit.jeans), skin = SKIN[n.look.skin], hair = new THREE.Color(n.look.hairColor);
       const hs = n.look.height / 1.75, ws = n.look.width; this.sc.set(ws, hs, ws * 0.92); base.scale(this.sc);
       for (const p of this.parts) {
