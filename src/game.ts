@@ -9,6 +9,8 @@ import type { Traffic, Obstacle } from './vehicles/traffic';
 import type { Smoke } from './vehicles/smoke';
 import type { Effects } from './vehicles/effects';
 import type { Police } from './police/police';
+import { Missions } from './missions/missions';
+import { makeOffers, type Offer, type GenCtx } from './missions/generator';
 import { witnessFactor, fineFor } from './police/rules';
 import { Player } from './player/player';
 import { Needs } from './survival/needs';
@@ -29,7 +31,7 @@ export type Mode = 'foot' | 'car';
 export class Game {
   mode: Mode = 'foot'; sleeping = false; money = 40; inv = { nourriture: 1, eau: 1 }; looted = new Set<string>();
   needs = new Needs(); heat = new Heat(); clock: Clock; coll: Collision;
-  vehicles!: VehicleWorld; traffic!: Traffic; smoke?: Smoke; tireSmoke?: Smoke; fx?: Effects; police?: Police; private ramT = 0; private speedMsg = 0; interior!: InteriorManager; observed: Npc | null = null; npcs = new Map<number, Npc>(); sim?: NpcSim; states = new Map<number, NpcState>(); talkCount = 0; camYaw = 0; camPitch = 0.28; private saveT = 0; private ctl: Controls = { throttle: 0, brake: 0, steer: 0, handbrake: false };
+  vehicles!: VehicleWorld; traffic!: Traffic; smoke?: Smoke; tireSmoke?: Smoke; fx?: Effects; police?: Police; missions = new Missions(); offers: Offer[] = []; private mbase?: Omit<GenCtx, 'day' | 'rep' | 'at' | 'seed'>; private offerDay = -1; boarded: number | null = null; dealerSel = 0; onMissionsKey: () => void = () => {}; onOffers: () => void = () => {}; private ramT = 0; private speedMsg = 0; interior!: InteriorManager; observed: Npc | null = null; npcs = new Map<number, Npc>(); sim?: NpcSim; states = new Map<number, NpcState>(); talkCount = 0; camYaw = 0; camPitch = 0.28; private saveT = 0; private ctl: Controls = { throttle: 0, brake: 0, steer: 0, handbrake: false };
   constructor(public world: WorldData, public pois: Poi[], public car: Car, public player: Player, public input: Input, public hud: Hud, startHour: number, private start: { x: number; z: number; h: number }, scene: THREE.Scene) {
     this.clock = new Clock(startHour); this.coll = new Collision(world.builds); this.respawn(false);
     this.interior = new InteriorManager(this, new BuildingIndex(world.builds, pois), scene);
@@ -46,9 +48,43 @@ export class Game {
   private arrest() {
     const stars = this.heat.stars; const fine = fineFor(this.money, stars); this.money -= fine; const lost = this.inv.nourriture + this.inv.eau; this.inv = { nourriture: 0, eau: 0 }; this.heat.value = 0; this.police?.clearAll();
     const gp = this.pois.find(p => p.sous_type === 'police' && /gendarmerie/i.test(p.nom)) ?? { x: -848, y: -89 }; this.mode = 'foot'; this.player.root.visible = true; this.player.pos.set(gp.x + 3, 0, gp.y + 6); this.camYaw = 0; this.car.speed = 0; this.clock.hour += 3; this.needs.tick(3, false);
+    this.boarded = null; { const e = this.missions.fail('marchandise saisie'); if (e) this.onOffers(); }
     this.hud.toast(`ARRESTATION — amende ${fine} €${lost ? `, marchandise saisie (${lost})` : ''}. Vous sortez de la gendarmerie.`, 7);
   }
   attachPolice(p: Police) { this.police = p; }
+  attachMissions(base: Omit<GenCtx, 'day' | 'rep' | 'at' | 'seed'>) { this.mbase = base; this.refreshOffers(); }
+  refreshOffers() { if (!this.mbase) return; this.offers = makeOffers({ ...this.mbase, day: this.clock.day, seed: 5, rep: this.missions.rep, at: { x: this.pos.x, z: this.pos.z } }); this.offerDay = this.clock.day; this.onOffers(); }
+  startOffer(o: Offer) {
+    if (this.missions.active) { this.hud.toast('Une mission est déjà en cours (J pour la gérer).'); return; }
+    if (o.kind === 'taxi') {
+      let best: NpcState | null = null, bd = 450; for (const s of this.states.values()) { if (s.kind !== 'marche') continue; const n = this.npcs.get(s.id)!; if (n.minor) continue; const d = Math.hypot(s.x - this.pos.x, s.z - this.pos.z); if (d < bd) { bd = d; best = s; } }
+      if (!best) { this.hud.toast('Aucun habitant ne cherche de taxi près de vous.'); return; } const n = this.npcs.get(best.id)!; const dest = best.place; const d = Math.hypot(dest.x - best.x, dest.z - best.z);
+      o = { ...o, titre: `Taxi : ${n.prenom} ${n.nom}`, desc: `Emmener ${n.prenom} à ${dest.nom}.`, npcId: n.id, pay: Math.round((12 + d * 0.04) * this.missions.mult()), stages: [{ x: best.x, z: best.z, label: `Prendre ${n.prenom}`, kind: 'prise', r: 8 }, { x: dest.x, z: dest.z, label: `Déposer ${n.prenom} (${dest.nom})`, kind: 'depot', r: 10 }] };
+    }
+    this.missions.accept(o); this.hud.toast(`Mission : ${o.titre}`, 4); this.onOffers();
+  }
+  missionTarget(): { x: number; z: number; label: string } | null {
+    const a = this.missions.active, s = this.missions.stage(); if (!a || !s) return null;
+    if (a.offer.kind === 'taxi' && a.stage === 0 && a.offer.npcId !== undefined) { const st = this.states.get(a.offer.npcId); if (st) return { x: st.x, z: st.z, label: s.label }; }
+    return { x: s.x, z: s.z, label: s.label };
+  }
+  private missionUpdate(dt: number) {
+    const a = this.missions.active; if (!a) return; const tg = this.missionTarget();
+    if (a.offer.kind === 'taxi' && a.stage === 0 && a.offer.npcId !== undefined) { const st = this.states.get(a.offer.npcId); if (st && st.kind === 'dedans') { this.missions.fail('x'); this.hud.toast('L\'habitant est entré quelque part : course annulée.'); this.onOffers(); return; } }
+    const inCar = this.mode === 'car'; const ev = this.missions.update(dt, { x: this.pos.x, z: this.pos.z, speed: inCar ? Math.abs(this.car.speed) : this.player.speed, inCar, stars: this.heat.stars, target: tg });
+    if (!ev) return; this.onOffers();
+    if (ev.type === 'prise') { this.hud.toast(ev.label.replace(/^Prendre|^Retirer|^Récupérer/, 'Récupéré :'), 3); if (a.offer.kind === 'colis') this.crime(10); if (a.offer.kind === 'taxi') this.boarded = a.offer.npcId ?? null; }
+    else if (ev.type === 'point') this.hud.toast(`${ev.label} validé (${ev.n}/${a.offer.stages.length})`, 2);
+    else if (ev.type === 'fini') { this.money += ev.pay; this.boarded = null; this.hud.toast(`Mission réussie : +${ev.pay} € · réputation +${ev.rep}${ev.note ? ' — ' + ev.note : ''}`, 6); this.refreshOffers(); }
+    else if (ev.type === 'echec') { this.boarded = null; this.hud.toast(`Mission échouée : ${ev.why}`, 5); }
+  }
+  /** Concession : acheter un véhicule (B) ou changer de modèle (N) près d'un garage/concessionnaire. */
+  private dealer() {
+    const p = this.nearestPoi(25); if (!p || p.sous_type !== 'car') return; const models = (['citadine', 'break', 'utilitaire', 'berline'] as const); const inp = this.input;
+    if (inp.hit('KeyN', 'next')) { this.dealerSel = (this.dealerSel + 1) % models.length; }
+    if (inp.hit('KeyB', 'buy')) { const t = models[this.dealerSel], sp = SPECS[t]; if (this.money < sp.prix) { this.hud.toast(`Il vous faut ${sp.prix} € pour ${sp.nom.toLowerCase()}.`); return; } this.money -= sp.prix;
+      const fx = Math.sin(this.camYaw), fz = Math.cos(this.camYaw); this.vehicles.add({ type: t, paint: [0xe8e8e8, 0x1f3f78, 0x8a1c1c, 0x2f5a3d, 0x4f5358][this.dealerSel % 5], hp: sp.hp, x: this.pos.x + fx * 5, z: this.pos.z + fz * 5, h: this.camYaw, speed: 0, kind: 'gare', mine: true, upgrade: 0, stun: 0 }); this.hud.toast(`${sp.nom} achetée (−${sp.prix} €) : elle vous attend devant.`, 4); }
+  }
   private policeUpdate(dt: number) {
     if (this.ramT > 0) this.ramT -= dt; if (!this.police) return; const inCar = this.mode === 'car'; const out = this.police.update(dt, { px: this.pos.x, pz: this.pos.z, pspeed: inCar ? Math.abs(this.car.speed) : this.player.speed, heading: this.car.heading, inCar, stars: this.heat.stars }, this.heat);
     if (out.speeding) { this.crime(8); this.hud.toast('Excès de vitesse repéré par une patrouille !', 2.5); }
@@ -89,9 +125,9 @@ export class Game {
   restore() {
     const s = Save.load(); if (!s) return false;
     this.player.pos.set(s.px, 0, s.pz); this.player.heading = s.heading; this.mode = s.mode; this.car.pos.set(s.car.x, 0, s.car.z); this.car.heading = s.car.h; if (s.car.type) this.car.setVehicle(s.car.type, s.car.paint ?? 0xb9b2a0, s.car.hp ?? 60, s.car.up ?? 0); for (const g of s.garage ?? []) this.vehicles.add({ type: g.type, paint: g.paint, hp: g.hp, x: g.x, z: g.z, h: g.h, speed: 0, kind: 'gare', mine: true, upgrade: g.up ?? 0, stun: 0 });
-    this.needs = new Needs(s.needs); this.money = s.money; this.inv = s.inv; this.heat.value = s.heat; this.clock.hour = s.hour; this.clock.day = s.day; this.looted = new Set(s.looted); this.camYaw = s.heading; return true;
+    this.needs = new Needs(s.needs); this.money = s.money; this.inv = s.inv; this.heat.value = s.heat; this.clock.hour = s.hour; this.clock.day = s.day; this.looted = new Set(s.looted); this.missions.rep = s.rep ?? 0; this.missions.done = s.done ?? 0; this.missions.active = (s.mission as any) ?? null; this.camYaw = s.heading; return true;
   }
-  persist() { Save.save({ px: this.player.pos.x, pz: this.player.pos.z, heading: this.player.heading, mode: this.mode, car: { x: this.car.pos.x, z: this.car.pos.z, h: this.car.heading, type: this.car.spec.type, paint: this.car.paint, hp: this.car.hp, up: this.car.upgrade }, garage: this.vehicles.list.filter(v => v.mine).map(v => ({ type: v.type, paint: v.paint, hp: v.hp, x: v.x, z: v.z, h: v.h, up: v.upgrade })), needs: this.needs.s, money: this.money, inv: this.inv, heat: this.heat.value, hour: this.clock.hour, day: this.clock.day, looted: [...this.looted] }); }
+  persist() { Save.save({ px: this.player.pos.x, pz: this.player.pos.z, heading: this.player.heading, mode: this.mode, car: { x: this.car.pos.x, z: this.car.pos.z, h: this.car.heading, type: this.car.spec.type, paint: this.car.paint, hp: this.car.hp, up: this.car.upgrade }, garage: this.vehicles.list.filter(v => v.mine).map(v => ({ type: v.type, paint: v.paint, hp: v.hp, x: v.x, z: v.z, h: v.h, up: v.upgrade })), needs: this.needs.s, money: this.money, inv: this.inv, heat: this.heat.value, hour: this.clock.hour, day: this.clock.day, looted: [...this.looted], rep: this.missions.rep, done: this.missions.done, mission: this.missions.active }); }
   get pos() { return this.mode === 'car' ? this.car.pos : this.player.pos; }
   nearestPoi(maxD = 16) { let best: Poi | null = null, bd = maxD; for (const p of this.pois) { const d = Math.hypot(p.x - this.pos.x, p.y - this.pos.z); if (d < bd) { bd = d; best = p; } } return best; }
   dow() { return (this.clock.day - 1 + 2) % 7; } // le jour 1 est un mercredi (hypothèse)
@@ -106,7 +142,7 @@ export class Game {
     if (this.interior.inside) this.interior.update(dt); else if (this.sleeping) this.updateSleep(dt); else if (this.mode === 'car') this.updateCar(dt); else this.updateFoot(dt);
     if (this.sleeping && !this.interior.inside && Math.random() < dt * 0.02) { this.wake(); this.crime(12); this.hud.toast('Du bruit vous réveille : on vous a repéré.'); }
     if (this.sleeping && (inp.hit('KeyR', 'sleep') || this.needs.s.energie >= 98)) this.wake();
-    this.traffic.update(dt, this.pos.x, this.pos.z, this.obstacles()); this.policeUpdate(dt);
+    this.traffic.update(dt, this.pos.x, this.pos.z, this.obstacles()); this.policeUpdate(dt); if (this.clock.day !== this.offerDay) this.refreshOffers(); if (!this.interior.inside) this.missionUpdate(dt); if (inp.hit('KeyJ', 'missions')) this.onMissionsKey(); this.dealer();
     const h = this.clock.tick(dt); this.needs.tick(h, this.sleeping, this.mode === 'foot' && inp.run && this.player.speed > 3 ? 1.8 : 1);
     this.heat.tick(h, this.mode === 'foot' && this.player.speed < 1);
     if (!this.interior.busy) this.hud.veil(this.sleeping ? 0.75 : this.needs.s.energie < 8 ? 0.35 : 0); this.hud.tick(dt);
@@ -187,6 +223,7 @@ export class Game {
     if (this.interior.busy) { this.hud.prompt(''); return; }
     if (this.mode === 'car') { const gp = this.nearestPoi(32); const gar = gp && ['car_repair', 'car', 'gas'].includes(gp.sous_type) && Math.abs(this.car.speed) < 1; this.hud.prompt(`E : descendre · L : phares${gar ? ' · G : garage' : ''}`); return; }
     const dCar = Math.hypot(this.car.pos.x - this.player.pos.x, this.car.pos.z - this.player.pos.z); if (dCar < 4.2) { this.hud.prompt(`E : monter dans votre ${this.car.spec.nom.toLowerCase()}`); return; }
+    const dp = this.nearestPoi(25); if (dp && dp.sous_type === 'car' && !this.nearestVehicle()) { const m = (['citadine', 'break', 'utilitaire', 'berline'] as const)[this.dealerSel]; this.hud.prompt(`${dp.nom} — B : acheter ${SPECS[m].nom.toLowerCase()} (${SPECS[m].prix} €) · N : suivant`); return; }
     const nv = this.nearestVehicle(); if (nv) { const sp = SPECS[nv.type]; this.hud.prompt(sp.police ? sp.nom : nv.mine ? `E : monter (${sp.nom.toLowerCase()})` : `E : voler cette ${sp.nom.toLowerCase()}`); return; }
     const nn = this.nearNpc(); if (nn) { const npc = this.npcs.get(nn.id)!; this.hud.prompt(npc.minor ? `${npc.prenom} (élève)` : `E : parler à ${npc.prenom} ${npc.nom} · toucher : observer`); return; }
     this.hud.prompt(this.interior.nearDoorPrompt());

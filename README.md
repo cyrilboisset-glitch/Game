@@ -38,3 +38,9 @@ Effets : traces de pneus au sol et fumée de pneus (frein à main, gros freinage
 Gendarmerie (src/police/) : un délit n'est compté qu'en proportion de ce qui est vu (gendarmerie à portée 100 %, témoin 60 %, personne 25 %). De 1 à 5 étoiles : 1, 2, 4, 6, 8 unités à la poursuite (itinéraire A* puis poursuite directe de près, fourgons à partir de 4 étoiles), barrages à partir de 3 étoiles (1, 2, 3), les patrouilles de la circulation rejoignent la poursuite. Excès de vitesse devant une patrouille, percussion d'un véhicule de gendarmerie = délit.
 Arrestation : rester presque immobile à moins de 7 m d'une unité pendant 2,5 s → amende (100 € + 80 € par étoile, au plus tout l'argent), marchandise (inventaire) saisie, retour devant la gendarmerie, 3 h perdues. Pas de mort. Fuite : la recherche ne baisse qu'après 20 s sans être vu.
 Limites : pas de gendarmes à pied ni d'hélicoptère, pas de sirènes sonores (audio en phase 8), les unités ne gèrent pas les poursuites hors route.
+
+## Missions et argent (phase 7)
+Journal de missions (J) : offres du jour déterministes (jour + graine). Types : livraison entre commerces, coursier entre entreprises, course chronométrée en voiture (3 points), taxi (un habitant à pied près de toi, tu l'emmènes à sa destination), colis « discret » (lieux **fictifs** et neutres : bouts de voie sans bâtiment à moins de 35 m et à plus de 250 m de toute école ; marchandise générique ; la prime est divisée par deux si tu as 2 étoiles ou plus). Balise lumineuse + repère sur la minimap + suivi du délai à l'écran.
+Réputation 0-100 : majore la paie jusqu'à +50 %. Arrestation = mission échouée (marchandise saisie).
+Concession (POI de type « car ») : B acheter, N changer de modèle ; le véhicule acheté t'attend devant. Garage (G) : réparer puis améliorer le moteur.
+Limites : pas de location de logement, le taxi ne gère qu'un passager adulte à pied, offres générées au début de chaque jour de jeu.

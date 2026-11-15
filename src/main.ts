@@ -10,6 +10,8 @@ import { Traffic } from './vehicles/traffic';
 import { Smoke } from './vehicles/smoke';
 import { Effects } from './vehicles/effects';
 import { Police } from './police/police';
+import { MissionsPanel } from './ui/missionsPanel';
+import { neutralSpots } from './missions/generator';
 import { SPECS, CIVIL_TYPES, PAINTS } from './vehicles/specs';
 import { Player } from './player/player';
 import { AvatarFactory } from './player/avatar';
@@ -60,6 +62,15 @@ const NPC_COUNT = +(q.get('npc') ?? 4000);
 const npcs = buildPopulation(world, pois, game.interior.index, graph, addrs, { x: a[0], z: a[1] }, NPC_COUNT);
 const sim = new NpcSim(npcs, graph); game.attachNpcs(npcs, sim); const npcRender = new NpcRenderer(scene, avatars, game.npcs); const panel = new ObservePanel();
 panel.onQuit = () => { game.stopObserving(); panel.show(false); }; panel.onSpeed = x => game.setSpeed(x);
+// missions : offres, journal, balise, suivi
+const spotsOf = (types: string[]) => { const out: { x: number; z: number; nom: string }[] = []; for (const p of pois) { if (!types.includes(p.sous_type)) continue; const e = game.interior.index.entryOfPoi(p); if (e) out.push({ x: e.px + e.nx * 1.4, z: e.pz + e.nz * 1.4, nom: p.nom }); } return out; };
+const dead: { x: number; z: number }[] = []; const nodes: { x: number; z: number }[] = []; graph.pts.forEach((p, i) => { const d = graph.degree(i); if (d === 1) dead.push({ x: p[0], z: p[1] }); if (d >= 2 && i % 9 === 0) nodes.push({ x: p[0], z: p[1] }); });
+const schools = pois.filter(p => ['school', 'college', 'kindergarten'].includes(p.sous_type)).map(p => ({ x: p.x, z: p.y }));
+const neutres = neutralSpots(dead, (x, z) => game.coll.resolve({ x, z }, 35).depth > 0, schools);
+const mpanel = new MissionsPanel(); game.onOffers = () => mpanel.setOffers(game.offers, game.missions.rep, game.missions.active?.offer.titre ?? '');
+mpanel.onAccept = o => game.startOffer(o); mpanel.onAbandon = () => { game.missions.abandon(); game.boarded = null; game.onOffers(); }; game.onMissionsKey = () => mpanel.toggle();
+game.attachMissions({ commerces: spotsOf(['supermarket', 'bakery', 'butcher', 'greengrocer', 'pastry', 'variety_store', 'clothes', 'florist', 'books', 'convenience']), bureaux: spotsOf(['bank', 'estate_agent', 'employment_agency', 'insurance', 'lawyer', 'townhall', 'government', 'accountant', 'company']), neutres, nodes });
+const beacon = new THREE.Group(); { const m = new THREE.MeshBasicMaterial({ color: 0xffd34a, transparent: true, opacity: 0.28, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false }); beacon.add(new THREE.Mesh(new THREE.CylinderGeometry(1.3, 1.3, 70, 20, 1, true).translate(0, 35, 0), m), new THREE.Mesh(new THREE.RingGeometry(1.6, 2.4, 28).rotateX(-Math.PI / 2).translate(0, 0.25, 0), new THREE.MeshBasicMaterial({ color: 0xffd34a, transparent: true, opacity: 0.8, depthWrite: false, fog: false }))); beacon.visible = false; scene.add(beacon); }
 let down: { x: number; y: number; t: number } | null = null;
 renderer.domElement.addEventListener('pointerdown', e => { down = { x: e.clientX, y: e.clientY, t: performance.now() }; });
 renderer.domElement.addEventListener('pointerup', e => { if (!down) return; const moved = Math.hypot(e.clientX - down.x, e.clientY - down.y), dt = performance.now() - down.t; down = null; if (moved < 9 && dt < 400 && !game.interior.inside) { const id = npcRender.pick(e.clientX, e.clientY, camera, innerWidth, innerHeight); if (id !== null) { game.observe(id); panel.show(true); } } });
@@ -70,7 +81,7 @@ function updateStates(now: number, fx: number, fz: number) {
   for (const n of npcs) {
     let s = sim.stateAt(n, day, hour, false); const sel = game.observed?.id === n.id; const prev = game.states.get(n.id) ?? s;
     if (sel || Math.hypot(prev.x - fx, prev.z - fz) < 330 || Math.hypot(s.x - fx, s.z - fz) < 330) s = sim.stateAt(n, day, hour, true);
-    game.states.set(n.id, s); statesArr.push(s);
+    if (game.boarded === n.id) s = { ...s, kind: 'absent' as const }; game.states.set(n.id, s); statesArr.push(s);
   }
   statesMs = performance.now() - t0;
 }
@@ -118,7 +129,8 @@ function frame(now: number) {
   renderer.render(game.interior.inside ? game.interior.scene! : scene, camera);
   frames++; fpsT += dt; if (fpsT > 0.5) { fps = Math.round(frames / fpsT); frames = 0; fpsT = 0; }
   hud.update(game.needs, game.heat, game.money, game.inv, game.clock.label, game.clock.day);
-  minimap.draw(game.pos.x, game.pos.z, game.mode === 'car' ? car.heading : player.heading, now);
+  const mt = game.missionTarget(); minimap.draw(game.pos.x, game.pos.z, game.mode === 'car' ? car.heading : player.heading, now, mt);
+  if (mt) { const d = Math.round(Math.hypot(mt.x - game.pos.x, mt.z - game.pos.z)); beacon.visible = true; beacon.position.set(mt.x, 0, mt.z); (beacon.children[0] as THREE.Mesh).scale.setScalar(1 + Math.sin(now * 0.004) * 0.08); const rem = game.missions.remaining(); hud.tracker(`🎯 ${mt.label}<br><span style="font-weight:400;opacity:.85">${d} m${rem !== null ? ' · ⏱ ' + Math.floor(rem / 60) + ':' + String(rem % 60).padStart(2, '0') : ''}</span>`); } else { beacon.visible = false; hud.tracker(null); }
   requestAnimationFrame(frame);
 }
 void acc; requestAnimationFrame(frame);
