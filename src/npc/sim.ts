@@ -34,9 +34,9 @@ export class NpcSim {
   }
   private ensurePath(sg: Seg) {
     if (sg.path !== undefined) return sg.path;
-    const a = this.graph.nearest(sg.from!.x, sg.from!.z, 120), b = this.graph.nearest(sg.to!.x, sg.to!.z, 120);
-    const nodes = this.graph.path(a, b); if (!nodes) { sg.path = null; return null; }
-    const pl = this.graph.polyline(nodes, true, sg.mode === 'conduit' ? 0.4 : 1);
+    const veh = sg.mode === 'conduit'; const a = this.graph.nearest(sg.from!.x, sg.from!.z, 120, veh), b = this.graph.nearest(sg.to!.x, sg.to!.z, 120, veh);
+    const nodes = this.graph.path(a, b, veh); if (!nodes) { sg.path = null; return null; }
+    const pl = veh ? this.graph.vehPolyline(nodes).pts : this.graph.polyline(nodes, true, 1);
     sg.path = [[sg.from!.x, sg.from!.z], ...pl, [sg.to!.x, sg.to!.z]]; sg.len = polyLength(sg.path); return sg.path;
   }
   /** `detailed` : calcule le vrai chemin (A*) ; sinon trajet en ligne droite (PNJ lointains, invisibles). */

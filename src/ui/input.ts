@@ -25,7 +25,7 @@ export class Input {
   private buildTouch() {
     const root = document.createElement('div'); root.className = 'ui'; root.id = 'touch'; document.body.appendChild(root);
     root.innerHTML = `<div id="joy"><div id="knob"></div></div>
-      <div id="btns"><button data-a="action">E</button><button data-a="eat">Manger</button><button data-a="drink">Boire</button><button data-h="run">Courir</button><button data-h="brake">Frein</button><button data-a="sleep">Dormir</button><button data-a="pee">Besoin</button><button data-a="lights">Phares</button></div>`;
+      <div id="btns"><button data-a="action">E</button><button data-a="eat">Manger</button><button data-a="drink">Boire</button><button data-h="run">Courir</button><button data-h="brake">Frein</button><button data-a="sleep">Dormir</button><button data-a="pee">Besoin</button><button data-a="lights">Phares</button><button data-a="garage">Garage</button></div>`;
     const joy = root.querySelector('#joy') as HTMLElement, knob = root.querySelector('#knob') as HTMLElement; let id = -1;
     const upd = (e: PointerEvent) => { const r = joy.getBoundingClientRect(); let dx = (e.clientX - (r.left + r.width / 2)) / (r.width / 2), dy = (e.clientY - (r.top + r.height / 2)) / (r.height / 2); const l = Math.hypot(dx, dy); if (l > 1) { dx /= l; dy /= l; } this.touchMove = { x: dx, y: -dy }; knob.style.transform = `translate(${dx * 38}px,${dy * 38}px)`; };
     joy.addEventListener('pointerdown', e => { id = e.pointerId; joy.setPointerCapture(id); upd(e); }); joy.addEventListener('pointermove', e => { if (e.pointerId === id) upd(e); });

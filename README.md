@@ -25,3 +25,10 @@ Mode observation : toucher/cliquer un PNJ (ou touche O), fiche + journal en dire
 Élèves (mineurs) : uniquement école/domicile/parc ; non ciblables, dialogue neutre.
 Limites : un seul modèle de corps/visage (variations de vêtements et de cheveux), PNJ non visibles dans les intérieurs, voitures de PNJ simplifiées (boîtes), pas de collisions PNJ.
 Diversité (src/npc/appearance.ts) : origines (noms, carnation 6 teintes, cheveux), enfants (taille et tête plus grosse), personnes âgées (voûtées, cheveux gris/chauves), corpulences de fine à très forte, femmes (cheveux longs/queue, jupes). Purement cosmétique. Limite : un seul visage/modèle de base.
+
+## Véhicules (phase 5)
+7 modèles procéduraux (src/vehicles/models.ts, aucune ressource externe) : vieille berline (départ), citadine, berline, break, utilitaire, berline et fourgon de gendarmerie. Caractéristiques distinctes (vitesse, accélération, freinage, direction, adhérence, masse, points de vie : src/vehicles/specs.ts).
+~380 véhicules stationnés le long des rues ; E près d'un véhicule : le voler (recherche +, alarme possible) ; véhicule en circulation à l'arrêt : car-jacking (recherche +35). Le véhicule quitté reste sur place et t'appartient.
+Circulation : voitures sur le graphe routier (sens uniques, limites de vitesse, distance de sécurité, un véhicule à la fois par carrefour), uniquement autour du joueur ; 2 patrouilles de gendarmerie (gyrophares). Voitures des PNJ avec les mêmes modèles.
+Dégâts (chocs contre bâtiments et véhicules, fumée à partir de 45 % de dégâts, moteur en panne à 0), garage (G près d'un atelier/station : réparation puis amélioration du moteur jusqu'au niveau 3). Paramètres d'URL : `?trafic=N`, `?parked=N`.
+Limites : pas de collision avec les piétons, pas de feux tricolores, circulation encore lente dans les carrefours, modèles stylisés (pas photoréalistes).

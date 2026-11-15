@@ -4,31 +4,30 @@ import type { Npc } from './identity';
 import type { NpcState } from './sim';
 import { SKIN_DISPLAY } from './appearance';
 
-const MAX_PED = 450, MAX_CAR = 40, AVATARS = 5, AVATAR_RANGE = 22;
+const MAX_PED = 450, AVATARS = 5, AVATAR_RANGE = 22;
 const SKIN = SKIN_DISPLAY.map(c => new THREE.Color(c));
 const box = (w: number, h: number, d: number, y: number) => new THREE.BoxGeometry(w, h, d).translate(0, y, 0);
 
 /** Rendu des habitants : silhouettes instanciées (6 draw calls pour tous), avatars complets animés pour les plus proches et le PNJ observé. */
 export class NpcRenderer {
   private parts: { mesh: THREE.InstancedMesh; px: number; py: number; pz: number; kind: 'torse' | 'jambeG' | 'jambeD' | 'brasG' | 'brasD' | 'tete' | 'cheveux' | 'jupe' }[] = [];
-  private cars: THREE.InstancedMesh[] = []; private avatars = new Map<number, { av: AvatarInstance; t: number }>(); private dummy = new THREE.Matrix4(); private q = new THREE.Quaternion(); private qx = new THREE.Quaternion(); private v = new THREE.Vector3(); private one = new THREE.Vector3(1, 1, 1); private zero = new THREE.Vector3(0.0001, 0.0001, 0.0001); private sc = new THREE.Vector3();
+  drivers: NpcState[] = []; private avatars = new Map<number, { av: AvatarInstance; t: number }>(); private dummy = new THREE.Matrix4(); private q = new THREE.Quaternion(); private qx = new THREE.Quaternion(); private v = new THREE.Vector3(); private one = new THREE.Vector3(1, 1, 1); private zero = new THREE.Vector3(0.0001, 0.0001, 0.0001); private sc = new THREE.Vector3();
   visible: { id: number; x: number; z: number; head: number }[] = [];
   constructor(private scene: THREE.Scene, private factory: AvatarFactory, private npcById: Map<number, Npc>) {
     const mk = (geo: THREE.BufferGeometry, px: number, py: number, pz: number, kind: any) => { const m = new THREE.InstancedMesh(geo, new THREE.MeshStandardMaterial({ roughness: 0.9 }), MAX_PED); m.count = 0; m.castShadow = true; m.frustumCulled = false; m.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(MAX_PED * 3), 3); scene.add(m); this.parts.push({ mesh: m, px, py, pz, kind }); };
     mk(box(0.46, 0.6, 0.26, 0.3).translate(0, 1.2, 0), 0, 0, 0, 'torse'); mk(box(0.19, 0.86, 0.2, -0.43), -0.12, 0.9, 0, 'jambeG'); mk(box(0.19, 0.86, 0.2, -0.43), 0.12, 0.9, 0, 'jambeD');
     mk(box(0.13, 0.6, 0.14, -0.28), -0.32, 1.48, 0, 'brasG'); mk(box(0.13, 0.6, 0.14, -0.28), 0.32, 1.48, 0, 'brasD'); mk(new THREE.SphereGeometry(0.115, 10, 8).translate(0, 1.67, 0), 0, 0, 0, 'tete');
     mk(new THREE.SphereGeometry(0.125, 10, 6, 0, Math.PI * 2, 0, Math.PI * 0.55).translate(0, 1.69, -0.005), 0, 0, 0, 'cheveux'); mk(new THREE.CylinderGeometry(0.2, 0.3, 0.46, 10, 1, true).translate(0, 0.72, 0), 0, 0, 0, 'jupe');
-    for (const [g, y] of [[new THREE.BoxGeometry(1.8, 0.7, 4.2).translate(0, 0.75, 0), 0], [new THREE.BoxGeometry(1.6, 0.6, 2.1).translate(0, 1.4, -0.2), 0]] as const) { void y; const m = new THREE.InstancedMesh(g, new THREE.MeshStandardMaterial({ roughness: 0.4, metalness: 0.4 }), MAX_CAR); m.count = 0; m.castShadow = true; m.frustumCulled = false; m.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(MAX_CAR * 3), 3); scene.add(m); this.cars.push(m); }
   }
   update(dt: number, states: NpcState[], fx: number, fz: number, selectedId: number | null, now: number, timeScale = 1) {
     const near = states.filter(s => (s.kind === 'marche' || s.kind === 'dehors' || s.kind === 'conduit') && (Math.hypot(s.x - fx, s.z - fz) < 190 || s.id === selectedId));
     near.sort((a, b) => Math.hypot(a.x - fx, a.z - fz) - Math.hypot(b.x - fx, b.z - fz));
-    this.visible = []; let ped = 0, car = 0; const wantAvatar = new Set<number>(); let na = 0;
+    this.visible = []; this.drivers = []; let ped = 0; const wantAvatar = new Set<number>(); let na = 0;
     for (const s of near) { if (s.kind !== 'conduit' && (s.id === selectedId || (na < AVATARS && Math.hypot(s.x - fx, s.z - fz) < AVATAR_RANGE))) { wantAvatar.add(s.id); if (s.id !== selectedId) na++; } }
     for (const [id, a] of this.avatars) if (!wantAvatar.has(id)) { this.scene.remove(a.av.root); a.av.dispose(); this.avatars.delete(id); }
     for (const s of near) {
       const n = this.npcById.get(s.id)!; this.visible.push({ id: s.id, x: s.x, z: s.z, head: s.kind === 'conduit' ? 1.3 : 1.7 });
-      if (s.kind === 'conduit') { if (car < MAX_CAR) { this.q.setFromAxisAngle(this.v.set(0, 1, 0), s.h); for (const m of this.cars) { this.dummy.compose(this.v.set(s.x, 0, s.z), this.q, this.one); m.setMatrixAt(car, this.dummy); m.setColorAt(car, new THREE.Color().setHSL((n.seed % 360) / 360, 0.5, 0.45)); } car++; } continue; }
+      if (s.kind === 'conduit') { this.drivers.push(s); continue; }
       if (wantAvatar.has(s.id)) {
         let a = this.avatars.get(s.id); if (!a) { a = { av: this.factory.create(n.outfit, n.look), t: 0 }; this.scene.add(a.av.root); this.avatars.set(s.id, a); }
         a.av.root.position.set(s.x, 0, s.z); a.av.root.rotation.y = s.h; const sp = s.kind === 'dehors' ? 0.9 : Math.min(s.speed * Math.min(timeScale, 4), 6.5); a.av.set(sp > 3.5 ? 'Run' : sp > 0.4 ? 'Walk' : 'Idle', sp); a.av.update(dt); continue;
@@ -46,9 +45,8 @@ export class NpcRenderer {
       ped++;
     }
     for (const p of this.parts) { p.mesh.count = ped; p.mesh.instanceMatrix.needsUpdate = true; if (p.mesh.instanceColor) p.mesh.instanceColor.needsUpdate = true; }
-    for (const m of this.cars) { m.count = car; m.instanceMatrix.needsUpdate = true; if (m.instanceColor) m.instanceColor.needsUpdate = true; }
   }
-  stats() { return { silhouettes: this.parts[0].mesh.count, voitures: this.cars[0].count, avatars: this.avatars.size }; }
+  stats() { return { silhouettes: this.parts[0].mesh.count, voitures: this.drivers.length, avatars: this.avatars.size }; }
   /** PNJ le plus proche d'un clic (distance écran) parmi les PNJ affichés. */
   pick(px: number, py: number, camera: THREE.Camera, w: number, h: number, maxPx = 55): number | null {
     let best: number | null = null, bd = maxPx;
