@@ -31,7 +31,7 @@ export function createMaterials() {
   const gravel = mk(gv, 1);
   const greens = std({ map: gr.map, normalMap: gr.normalMap, roughness: 1, vertexColors: true, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 });
   const wn = TX.waterNormal(); wn.repeat.set(0.08, 0.08); const water = std({ color: 0x2c4f5c, roughness: 0.12, metalness: 0.15, normalMap: wn, normalScale: new THREE.Vector2(0.6, 0.6), envMapIntensity: 1.6, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
-  const bark = std({ color: 0xffffff, vertexColors: true, roughness: 1 });
+  const bark = std({ color: 0xffffff, vertexColors: true, roughness: 0.9, side: THREE.DoubleSide });
   const leaves = std({ map: TX.leaf(), alphaTest: 0.42, alphaToCoverage: true, vertexColors: true, roughness: 0.85, side: THREE.DoubleSide });
   const hedgeT = TX.leaf(); const hedge = std({ map: TX.hedgeTex(), vertexColors: true, roughness: 0.95 }); void hedgeT;
   const metal = std({ color: 0x40444a, metalness: 0.6, roughness: 0.5, vertexColors: true, side: THREE.DoubleSide });

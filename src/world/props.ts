@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { MeshBuilder } from './meshbuilder';
 import { rnd } from './textures';
+import { orientedBox } from './buildings';
 
 const TRUNK = new THREE.Color('#5e4632'), TRUNK2 = new THREE.Color('#7a6a5a');
 /** Quad orienté (feuillage) avec normale imposée (normale « sphérique » du houppier → éclairage doux et volumique). */
@@ -46,6 +47,23 @@ export function addFence(hedges: MeshBuilder, solids: MeshBuilder, poles: MeshBu
     b.planar([P(0, -o, y0 + h), P(0, o, y0 + h), P(l, o, y0 + h), P(l, -o, y0 + h)], [[0, 0], [w / 2, 0], [w / 2, l / 2], [0, l / 2]], col.clone().multiplyScalar(1.1)); b.planar([P(0, -o, y0), P(0, o, y0), P(0, o, y0 + h), P(0, -o, y0 + h)], [[0, 0], [1, 0], [1, 1], [0, 1]], col); b.planar([P(l, o, y0), P(l, -o, y0), P(l, -o, y0 + h), P(l, o, y0 + h)], [[0, 0], [1, 0], [1, 1], [0, 1]], col); };
   if (kind === 'haie') box(hedges, 0.75, 1.35 + rnd() * 0.3, 0, HEDGE.clone().multiplyScalar(0.85 + rnd() * 0.3));
   else { box(solids, 0.25, 0.7, 0, WALL); box(poles, 0.04, 0.6, 0.7, GRILLE); for (let s = 0; s < l; s += 2.5) { const x = ax + dx * s, z = az + dz * s; solids.box(x, z, 0.32, 0.32, 1.4, 0, WALL); } }
+}
+
+const WOOD = new THREE.Color('#7a5434'), IRON = new THREE.Color('#2b2f33'), BIN = new THREE.Color('#2f5a3a'), SIGNR = new THREE.Color('#c41e1e'), SIGNW = new THREE.Color('#f2f2f2');
+/** Banc public face à la rue (fx,fz = direction vers la chaussée). */
+export function addBench(solids: MeshBuilder, x: number, z: number, fx: number, fz: number) {
+  const rx = fz, rz = -fx; orientedBox(solids, x, z, fx, fz, 1.7, 0.45, 0.05, 0.42, WOOD); orientedBox(solids, x - fx * 0.24, z - fz * 0.24, fx, fz, 1.7, 0.05, 0.4, 0.5, WOOD);
+  for (const s2 of [-0.75, 0.75]) orientedBox(solids, x + rx * s2, z + rz * s2, fx, fz, 0.06, 0.5, 0.42, 0, IRON);
+}
+/** Poubelle de rue. */
+export function addBin(solids: MeshBuilder, x: number, z: number) { orientedBox(solids, x, z, 1, 0, 0.45, 0.45, 0.85, 0, BIN); orientedBox(solids, x, z, 1, 0, 0.5, 0.5, 0.05, 0.85, IRON); }
+/** Panneau (stop octogonal ou cédez-le-passage triangulaire), tourné vers les véhicules qui arrivent. */
+export function addSign(poles: MeshBuilder, solids: MeshBuilder, x: number, z: number, fx: number, fz: number, stop: boolean) {
+  cylinder(poles, x, 0, z, x, 2.3, z, 0.035, 0.035, IRON, 5); const rx = fz, rz = -fx; const n = stop ? 8 : 3, R = stop ? 0.32 : 0.42, cy = 2.25; const base = solids.count;
+  solids.vert(x - fx * 0.03, cy, z - fz * 0.03, -fx, 0, -fz, 0.5, 0.5, stop ? SIGNR : SIGNW);
+  for (let i = 0; i <= n; i++) { const a = (i / n) * Math.PI * 2 + (stop ? Math.PI / 8 : -Math.PI / 2); const px = x - fx * 0.03 + rx * Math.cos(a) * R, pz = z - fz * 0.03 + rz * Math.cos(a) * R, py = cy + Math.sin(a) * R * (stop ? 1 : -1); solids.vert(px, py, pz, -fx, 0, -fz, 0, 0, stop ? SIGNR : SIGNR); }
+  for (let i = 0; i < n; i++) solids.tri(base, base + 1 + i, base + 2 + i);
+  for (let i = 0; i < n; i++) solids.tri(base, base + 2 + i, base + 1 + i);
 }
 
 const GREY = new THREE.Color('#3a3d42');

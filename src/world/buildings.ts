@@ -8,7 +8,9 @@ const PLASTER = ['#f1e8d6', '#e6d3b0', '#d9bf98', '#efe0c4', '#c9c4bb', '#e8cfc0
 const FLOOR_H = 3.0, BAY = 3.8;
 // cases de l'atlas (origine en bas à gauche, coordonnées v inversées par rapport au canvas)
 const CELL = { win: [0, 1], shut: [1, 1], lit: [2, 1], plain: [3, 1], door: [0, 0], shop: [1, 0] } as const;
-const cell = (k: keyof typeof CELL, u: number, v: number) => [(CELL[k][0] + u) / 4, (CELL[k][1] + v) / 2];
+let BRICK = 0;   // 1 = façade en brique (moitié basse de l'atlas)
+const cell = (k: keyof typeof CELL, u: number, v: number) => [(CELL[k][0] + u) / 4, (CELL[k][1] + (BRICK ? 0 : 2) + v) / 4];
+const AWN = ['#b8322b', '#2f6b3a', '#1f4f8a', '#c9a227', '#7a2f5a', '#3a3f45'].map(c => new THREE.Color(c));
 
 export interface BuildBuilders { wall: MeshBuilder; roof: MeshBuilder; flat: MeshBuilder; trim?: MeshBuilder; }
 
@@ -53,6 +55,12 @@ function wallRun(B: BuildBuilders, p: Pt[], h: number, floors: number, col: THRE
         const C = [Bp[0], y1, Bp[2]], D = [A[0], y1, A[2]];
         // le plan x/z : normale vers l'extérieur ⇒ ordre A, B, C, D (dépend de l'orientation ; polygone normalisé avant)
         B.wall.planar([A, Bp, C, D], [cell(kind, 0, 0), cell(kind, 1, 0), cell(kind, 1, 1), cell(kind, 0, 1)], col);
+        if (kind === 'shop' && B.trim) {   // store de commerce : toile inclinée + lambrequin
+          const nx = -(b[1] - a[1]) / len, nz = (b[0] - a[0]) / len, ac = AWN[(seedv + i) % AWN.length]; const yA = Math.min(y1 - 0.15, 2.85), out = 1.15;
+          const o = (P: number[], d: number, dy: number) => [P[0] + nx * d, P[1] - P[1] + dy, P[2] + nz * d];
+          B.trim.planar([o(A, 0.02, yA), o(Bp, 0.02, yA), o(Bp, out, yA - 0.55), o(A, out, yA - 0.55)].reverse(), [[0, 0], [1, 0], [1, 1], [0, 1]], ac);
+          B.trim.planar([o(A, out, yA - 0.55), o(Bp, out, yA - 0.55), o(Bp, out, yA - 0.8), o(A, out, yA - 0.8)].reverse(), [[0, 0], [1, 0], [1, 1], [0, 1]], ac.clone().multiplyScalar(0.8));
+        }
       }
     }
   }
@@ -117,7 +125,7 @@ export function addBuilding(B: BuildBuilders, b: Build, idx: number) {
   if (a > 0) p = p.slice().reverse();
   const floors = b.l > 0 ? b.l : (b.h > 0 ? Math.max(1, Math.round(b.h / FLOOR_H)) : (Math.abs(a) > 600 ? 2 : (rnd() < 0.55 ? 2 : 3)));
   const h = b.h > 0 ? b.h : floors * FLOOR_H;
-  const col = PLASTER[idx % PLASTER.length].clone().multiplyScalar(0.92 + rnd() * 0.12);
+  BRICK = (idx * 2654435761 >>> 0) % 100 < 18 ? 1 : 0; const col = BRICK ? new THREE.Color(1, 0.96, 0.92).multiplyScalar(0.82 + rnd() * 0.22) : PLASTER[idx % PLASTER.length].clone().multiplyScalar(0.92 + rnd() * 0.12);
   wallRun(B, p, h, floors, col, idx);
   const pre = obb(p); const preFill = Math.abs(a) / Math.max(1, pre.a);
   const o = obb(p); const fill = Math.abs(a) / Math.max(1, o.a);

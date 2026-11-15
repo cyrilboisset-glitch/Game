@@ -53,3 +53,10 @@ Limites : aucun test sur un vrai téléphone (Xiaomi 14T) ; le son n'a pas pu ê
 
 ## Contrôles (résumé)
 ZQSD/flèches : bouger · Maj : courir · Espace : frein à main · H : klaxon · E : monter/descendre/entrer/parler · 1 manger · 2 boire · R : dormir · X : besoin · L : phares · G : garage · B/N : concession · J : missions · O ou toucher : observer un habitant · M : son · F2 : réglages. Mobile : joystick + boutons, glisser pour regarder.
+
+## Graphisme (passe 2)
+Horizon : massifs stylisés placés selon leurs directions réelles depuis Pontcharra (Belledonne à l'est/sud-est avec neige en altitude, Chartreuse et la falaise du Granier à l'ouest, Bauges au nord, vallée ouverte au NE et au SO), voile atmosphérique, nuages procéduraux animés.
+Post-traitement (src/core/post.ts) : rendu MSAA en demi-flottant, occlusion ambiante GTAO (niveau élevé), bloom (lumières de nuit, soleil couchant), étalonnage (contraste, ombres froides, vignettage, grain), sortie ACES. Niveau bas : rendu direct sans post-traitement.
+Sol : texture à deux échelles + variations de teinte (herbe grasse/sèche/sombre). Carte d'occupation au sol 2 m (src/world/mask.ts) pour placer jardins (arbustes, arbres, conifères), clôtures de propriété (haies taillées, murets + grilles), touffes d'herbe animées autour de la caméra, sans empiéter sur routes et bâtiments.
+Arbres refaits (branches + cartes de feuillage, conifères), façades : soubassement en pierre, corniches, balcons sur les immeubles, cheminées, stores colorés sur les commerces, ~18 % de façades en brique. Passages piétons aux carrefours des grands axes, trottoirs continus devant les entrées de garage, bancs, poubelles, panneaux stop/cédez-le-passage, eau à vaguelettes animées.
+Mesures (tools/perf.cjs, 412×915, toutes passes comprises : ombres + post-traitement) : bas 110 appels / 191 k triangles, moyen 193 / 469 k, élevé 449 / 1,88 M. Le niveau élevé dépasse le budget mobile et vise le PC ; « moyen » dépasse légèrement 150 appels à cause des passes d'ombre et de bloom.

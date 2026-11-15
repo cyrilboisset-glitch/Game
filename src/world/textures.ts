@@ -148,14 +148,17 @@ export function flatRoof(): PBR {
  */
 export interface FacadeAtlas { map: THREE.Texture; normalMap: THREE.Texture; roughnessMap: THREE.Texture; emissiveMap: THREE.Texture; }
 export function facadeAtlas(): FacadeAtlas {
-  const S = 256, W = S * 4, H = S * 2; const { c, g } = canvas(W, H);
+  // 4×4 : lignes 0-1 enduit, lignes 2-3 brique (mêmes ouvertures). Les ouvertures sont dessinées sur un calque transparent puis posées sur les deux fonds.
+  const S = 256, W = S * 4, H = S * 4; const F = canvas(W, H); const { c: layer, g } = canvas(W, S * 2); g.clearRect(0, 0, W, S * 2);
   const hc = canvas(W, H); hc.g.fillStyle = '#909090'; hc.g.fillRect(0, 0, W, H);
   const rc = canvas(W, H); rc.g.fillStyle = '#d0d0d0'; rc.g.fillRect(0, 0, W, H);
   const ec = canvas(W, H); ec.g.fillStyle = '#000'; ec.g.fillRect(0, 0, W, H);
+  { const bg = F.g; for (let y = S * 2; y < H; y += 16) { const off = ((y / 16) % 2) * 17; for (let x = -off; x < W; x += 34) { const v = 0.75 + rnd() * 0.35; bg.fillStyle = `rgb(${158 * v | 0},${82 * v | 0},${58 * v | 0})`; bg.fillRect(x, y, 32, 14); } }
+    bg.fillStyle = 'rgba(205,195,180,1)'; for (let y = S * 2; y < H; y += 16) bg.fillRect(0, y + 14, W, 2); for (let y = S * 2; y < H; y += 16) { const off = ((y / 16) % 2) * 17; for (let x = -off + 32; x < W; x += 34) bg.fillRect(x, y, 2, 14); } }
   for (let cy = 0; cy < 2; cy++) for (let cx = 0; cx < 4; cx++) {
     const x0 = cx * S, y0 = cy * S;
-    g.fillStyle = '#f4f1ea'; g.fillRect(x0, y0, S, S);
-    for (let i = 0; i < 30; i++) { const x = x0 + rnd() * S, y = y0 + rnd() * S, r = 20 + rnd() * 60; const gr = g.createRadialGradient(x, y, 0, x, y, r); const v = rnd() < .5 ? 0 : 255; gr.addColorStop(0, `rgba(${v},${v},${v},0.06)`); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; g.fillRect(x0, y0, S, S); }
+    F.g.fillStyle = '#f4f1ea'; F.g.fillRect(x0, y0, S, S);
+    for (let i = 0; i < 30; i++) { const x = x0 + rnd() * S, y = y0 + rnd() * S, r = 20 + rnd() * 60; const gr = g.createRadialGradient(x, y, 0, x, y, r); const v = rnd() < .5 ? 0 : 255; gr.addColorStop(0, `rgba(${v},${v},${v},0.06)`); gr.addColorStop(1, 'rgba(0,0,0,0)'); F.g.fillStyle = gr; F.g.fillRect(x0, y0, S, S); }
   }
   const frame = '#efece6';
   const glass = (x: number, y: number, w: number, h: number, lit = false) => {
@@ -195,10 +198,11 @@ export function facadeAtlas(): FacadeAtlas {
     depth(x0 + 20, y0 + 40, 216, 190, '#c0c0c0'); g.fillStyle = '#4a4f55'; g.fillRect(x0 + 20, y0 + 40, 216, 190);
     glass(x0 + 32, y0 + 54, 192, 160, true); g.fillStyle = '#4a4f55'; g.fillRect(x0 + 126, y0 + 54, 5, 160); depth(x0 + 32, y0 + 54, 192, 160, '#505050');
     ec.g.fillStyle = '#000'; ec.g.fillRect(x0 + 126, y0 + 54, 5, 160); g.fillStyle = '#a73a2c'; g.fillRect(x0 + 10, y0 + 10, 236, 22); }
-  noise(g, W, H, 12); noise(hc.g, W, H, 20);
-  const emissive = tex(ec.c, true); const tt = [emissive];
-  void tt;
-  return { map: tex(c, true), normalMap: tex(heightToNormal(hc.c, 3.5), false), roughnessMap: tex(rc.c, false), emissiveMap: emissive };
+  F.g.drawImage(layer, 0, 0); F.g.drawImage(layer, 0, S * 2);
+  for (const k of [hc, rc, ec]) k.g.drawImage(k.c, 0, 0, W, S * 2, 0, S * 2, W, S * 2);
+  noise(F.g, W, H, 12); noise(hc.g, W, H, 20);
+  const emissive = tex(ec.c, true);
+  return { map: tex(F.c, true), normalMap: tex(heightToNormal(hc.c, 3.5), false), roughnessMap: tex(rc.c, false), emissiveMap: emissive };
 }
 
 /** Feuillage (2 variantes côte à côte) : à gauche bouquet de feuilles découpé, à droite rameau d'aiguilles. Alpha pour les découpes. */

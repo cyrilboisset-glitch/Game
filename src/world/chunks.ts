@@ -3,9 +3,9 @@ import { MeshBuilder } from './meshbuilder';
 import { CHUNK, type WorldData } from './data';
 import { addBuilding, type BuildBuilders } from './buildings';
 import { addRoadPiece, addRail, addStrip, junctions, sidewalkCuts, splitGrid, ROAD_W, PATH_TYPES, type RoadBuilders } from './roads';
-import { addTree, addLamp, addConifer, addBush, addFence } from './props';
+import { addTree, addLamp, addConifer, addBush, addFence, addBench, addBin, addSign } from './props';
 import type { GroundMask } from './mask';
-import { area, centroid, length, pointInPoly, type Pt } from './geom';
+import { area, centroid, length, pointInPoly, slice, type Pt } from './geom';
 import { rnd, reseed } from './textures';
 import type { Materials } from './materials';
 
@@ -80,6 +80,12 @@ export class Chunks {
     if (M) {
       const x0 = cx * CHUNK, z0 = cy * CHUNK;
       for (let i = 0; i < 110; i++) { const x = x0 + rnd() * CHUNK, z = z0 + rnd() * CHUNK; if (!M.free(x, z, 1.6) || !M.nearBuilding(x, z, 10)) continue; const r = rnd(); if (r < 0.55) addBush(leaves, x, z, 0.8 + rnd() * 0.7); else if (r < 0.88) addTree(trees, leaves, x, z, 0.65 + rnd() * 0.45); else addConifer(trees, leaves, x, z, 0.6 + rnd() * 0.4); }
+      for (const rr of raw.roads) {   // mobilier urbain : bancs + poubelles le long des axes, panneaux aux carrefours
+        const road = this.w.roads[rr.ri]; if (!['primary', 'secondary', 'tertiary', 'residential', 'unclassified'].includes(road.t)) continue; const hw = ROAD_W[road.t] / 2; const total = length(rr.piece);
+        const at = (sAt: number) => { const sg = slice(rr.piece, sAt, sAt + 0.5); if (sg.length < 2) return null; const a = sg[0], b = sg[sg.length - 1]; const l = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1; return { x: a[0], z: a[1], dx: (b[0] - a[0]) / l, dz: (b[1] - a[1]) / l }; };
+        if (road.t !== 'residential' && road.t !== 'unclassified') for (let sAt = 20 + rnd() * 30; sAt < total - 2; sAt += 55 + rnd() * 40) { const p = at(sAt); if (!p) continue; const side = rnd() < 0.5 ? 1 : -1; const bx = p.x - p.dz * (hw + 1.7) * side, bz = p.z + p.dx * (hw + 1.7) * side; if (M.get(bx, bz) === 2) continue; addBench(solids, bx, bz, p.dz * side, -p.dx * side); addBin(solids, bx + p.dx * 1.4, bz + p.dz * 1.4); }
+        if (road.t === 'residential' || road.t === 'unclassified') for (const [c0] of ((road as any)._cuts as [number, number][]) ?? []) { const sAt = c0 - rr.sBase - 0.5; if (sAt < 0 || sAt > total - 1 || rnd() > 0.35) continue; const p = at(sAt); if (!p) continue; addSign(poles, solids, p.x - p.dz * (hw + 0.5), p.z + p.dx * (hw + 0.5), p.dx, p.dz, rnd() < 0.4); }
+      }
       for (const rr of raw.roads) {
         const road = this.w.roads[rr.ri]; if (!['residential', 'tertiary', 'unclassified', 'living_street'].includes(road.t)) continue; const off = ROAD_W[road.t] / 2 + 2.9;
         for (const side of [1, -1]) { let run: Pt[] = []; const flush = () => { if (run.length >= 3) { const a = run[0], b = run[run.length - 1]; const h = Math.abs(Math.sin(a[0] * 12.9898 + a[1] * 78.233) * 43758.5453) % 1; addFence(hedges, solids, poles, a[0], a[1], b[0], b[1], h < 0.6 ? 'haie' : 'muret'); } run = []; };
