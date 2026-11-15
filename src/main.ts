@@ -129,7 +129,9 @@ function placeCamera(dt: number) {
 const lampLights: THREE.PointLight[] = []; for (let i = 0; i < 6; i++) { const l = new THREE.PointLight(0xffd6a0, 0, 28, 1.6); scene.add(l); lampLights.push(l); }
 let lastShadow = 0; let acc = 0, last = performance.now(), frames = 0, fpsT = 0, fps = 0;
 chunks.update(game.pos.x, game.pos.z, VIEW); placeCamera(0);
-document.getElementById('loading')?.remove(); (window as any).__ready = true;
+document.getElementById('loading')?.remove();
+// hors ligne : enregistre le service worker (uniquement en HTTPS, donc pas en développement local)
+if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) navigator.serviceWorker.register('./sw.js').then(reg => { const done = () => { if (!localStorage.getItem('pontcharra-offline')) { try { localStorage.setItem('pontcharra-offline', '1'); } catch { /* ignoré */ } hud.toast('Jeu enregistré sur l\'appareil : il fonctionne maintenant sans internet.', 5); } }; if (reg.active) done(); else reg.addEventListener('updatefound', () => reg.installing?.addEventListener('statechange', e => { if ((e.target as ServiceWorker).state === 'activated') done(); })); }).catch(() => { /* hors ligne indisponible */ }); (window as any).__ready = true;
 (window as any).__game = { setQuality: (l: Level) => { quality.auto = false; quality.set(l); applyQuality(l); }, police, traffic, vworld, npcRender, npcStats: () => ({ ...npcRender.stats(), vehicules: vrender.count(), circulation: traffic.cars.length, garees: vworld.list.filter(v => v.kind === 'gare').length, habitants: npcs.length, majEtatsMs: +statesMs.toFixed(1) }), sync: () => { chunks.update(game.pos.x, game.pos.z, VIEW); signs.update(game.pos.x, game.pos.z); snap = true; placeCamera(0); }, game, car, player, camera, renderer, stats: () => ({ fps, calls: renderer.info.render.calls, tris: renderer.info.render.triangles, chunks: chunks.loaded.size }) };
 
 function frame(now: number) {

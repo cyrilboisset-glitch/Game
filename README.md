@@ -60,3 +60,10 @@ Post-traitement (src/core/post.ts) : rendu MSAA en demi-flottant, occlusion ambi
 Sol : texture à deux échelles + variations de teinte (herbe grasse/sèche/sombre). Carte d'occupation au sol 2 m (src/world/mask.ts) pour placer jardins (arbustes, arbres, conifères), clôtures de propriété (haies taillées, murets + grilles), touffes d'herbe animées autour de la caméra, sans empiéter sur routes et bâtiments.
 Arbres refaits (branches + cartes de feuillage, conifères), façades : soubassement en pierre, corniches, balcons sur les immeubles, cheminées, stores colorés sur les commerces, ~18 % de façades en brique. Passages piétons aux carrefours des grands axes, trottoirs continus devant les entrées de garage, bancs, poubelles, panneaux stop/cédez-le-passage, eau à vaguelettes animées.
 Mesures (tools/perf.cjs, 412×915, toutes passes comprises : ombres + post-traitement) : bas 110 appels / 191 k triangles, moyen 193 / 469 k, élevé 449 / 1,88 M. Le niveau élevé dépasse le budget mobile et vise le PC ; « moyen » dépasse légèrement 150 appels à cause des passes d'ombre et de bloom.
+
+## Installer sur le téléphone (hors ligne)
+Le jeu est publié automatiquement sur GitHub Pages à chaque push sur la branche par défaut (.github/workflows/deploy.yml).
+1. Une seule fois : sur GitHub, Settings → Pages → Build and deployment → Source : **GitHub Actions**.
+2. Sur le téléphone, ouvrir https://cyrilboisset-glitch.github.io/Game/ dans Chrome, attendre le message « Jeu enregistré sur l'appareil ».
+3. Menu ⋮ → « Ajouter à l'écran d'accueil » / « Installer l'application ». Le jeu se lance ensuite en plein écran, sans internet.
+Hors ligne : service worker généré par tools/gen-sw.mjs (met en cache tous les fichiers du build, ~6,4 Mo). Pour une mise à jour, rouvrir le jeu avec internet.
