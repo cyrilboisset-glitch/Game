@@ -94,11 +94,11 @@ export function pavement(): PBR {
 
 export function grass(): PBR {
   const W = 512; const { c, g } = canvas(W);
-  g.fillStyle = '#7f9a52'; g.fillRect(0, 0, W, W);
-  blotches(g, W, W, 220, 15, 70, 0.08);
+  g.fillStyle = '#6c8048'; g.fillRect(0, 0, W, W);
+  blotches(g, W, W, 220, 15, 70, 0.1);
   for (let i = 0; i < 9000; i++) {
     const x = rnd() * W, y = rnd() * W, l = 4 + rnd() * 8; const v = 70 + rnd() * 70;
-    g.strokeStyle = `rgba(${v * .9},${v + 70},${v * .45},0.35)`; g.lineWidth = 1; g.beginPath(); g.moveTo(x, y); g.lineTo(x + (rnd() - .5) * 4, y - l); g.stroke();
+    g.strokeStyle = `rgba(${v * .85},${v + 38},${v * .5},0.35)`; g.lineWidth = 1; g.beginPath(); g.moveTo(x, y); g.lineTo(x + (rnd() - .5) * 4, y - l); g.stroke();
   }
   noise(g, W, W, 22);
   const hc = canvas(W); hc.g.fillStyle = '#808080'; hc.g.fillRect(0, 0, W, W); noise(hc.g, W, W, 120);
@@ -201,15 +201,19 @@ export function facadeAtlas(): FacadeAtlas {
   return { map: tex(c, true), normalMap: tex(heightToNormal(hc.c, 3.5), false), roughnessMap: tex(rc.c, false), emissiveMap: emissive };
 }
 
+/** Feuillage (2 variantes côte à côte) : à gauche bouquet de feuilles découpé, à droite rameau d'aiguilles. Alpha pour les découpes. */
 export function leaf(): THREE.Texture {
-  const W = 256; const { c, g } = canvas(W);
-  g.clearRect(0, 0, W, W);
-  g.fillStyle = '#2f4a22'; g.beginPath(); g.arc(W / 2, W / 2, W * 0.46, 0, 7); g.fill();
-  for (let i = 0; i < 1600; i++) {
-    const a = rnd() * 6.283, r = Math.sqrt(rnd()) * W * 0.5; const x = W / 2 + Math.cos(a) * r, y = W / 2 + Math.sin(a) * r;
-    const v = 70 + rnd() * 100; g.fillStyle = `rgb(${v * .55},${v + 25},${v * .32})`; g.beginPath(); g.ellipse(x, y, 8, 4.5, rnd() * 3, 0, 7); g.fill();
-  }
-  const t = tex(c, true, false); t.wrapS = t.wrapT = THREE.RepeatWrapping; return t;
+  const W = 512, H = 256; const { c, g } = canvas(W, H); g.clearRect(0, 0, W, H);
+  for (let i = 0; i < 2600; i++) { const a = rnd() * 6.283, r = Math.pow(rnd(), 0.6) * 118; const x = 128 + Math.cos(a) * r, y = 128 + Math.sin(a) * r * 0.92; const v = 60 + rnd() * 110; g.fillStyle = `rgba(${v * .62 | 0},${v + 18 | 0},${v * .36 | 0},${0.85 + rnd() * 0.15})`; g.beginPath(); g.ellipse(x, y, 6 + rnd() * 5, 3 + rnd() * 2.5, rnd() * 3.14, 0, 7); g.fill(); }
+  for (let i = 0; i < 60; i++) { g.strokeStyle = 'rgba(70,50,30,0.6)'; g.lineWidth = 1.5; g.beginPath(); const a = rnd() * 6.28; g.moveTo(128, 128); g.lineTo(128 + Math.cos(a) * 90, 128 + Math.sin(a) * 90); g.stroke(); }
+  for (let k = 0; k < 9; k++) { const y0 = 20 + k * 25, x0 = 384; for (let i = 0; i < 90; i++) { const t = rnd(); const x = x0 + (t - 0.5) * 220 * (1 - k * 0.07), y = y0 + rnd() * 30; const v = 50 + rnd() * 60; g.strokeStyle = `rgba(${v * .5 | 0},${v + 15 | 0},${v * .45 | 0},0.95)`; g.lineWidth = 2; g.beginPath(); g.moveTo(x, y); g.lineTo(x + (rnd() - .5) * 8, y + 10 + rnd() * 8); g.stroke(); } }
+  const t = tex(c, true, false); t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping; return t;
+}
+/** Haie taillée : feuillage dense opaque. */
+export function hedgeTex(): THREE.Texture {
+  const W = 256; const { c, g } = canvas(W); g.fillStyle = '#4a6a34'; g.fillRect(0, 0, W, W);
+  for (let i = 0; i < 4000; i++) { const v = 50 + rnd() * 110; g.fillStyle = `rgb(${v * .6 | 0},${v + 20 | 0},${v * .35 | 0})`; g.beginPath(); g.ellipse(rnd() * W, rnd() * W, 3 + rnd() * 3, 2, rnd() * 3, 0, 7); g.fill(); }
+  return tex(c, true);
 }
 
 /** Sols et murs d'intérieur (1 répétition = 2 m). */
@@ -227,4 +231,17 @@ export function plaster(): PBR {
   const W = 256; const { c, g } = canvas(W); g.fillStyle = '#f2efe9'; g.fillRect(0, 0, W, W); blotches(g, W, W, 40, 20, 70, 0.05); noise(g, W, W, 14);
   const hc = canvas(W); hc.g.fillStyle = '#808080'; hc.g.fillRect(0, 0, W, W); noise(hc.g, W, W, 50);
   return { map: tex(c, true), normalMap: tex(heightToNormal(hc.c, 0.8), false) };
+}
+
+/** Normales d'eau (vaguelettes) : somme de sinus + bruit, répétable. */
+export function waterNormal(): THREE.Texture {
+  const W = 256; const hc = canvas(W); const d = hc.g.createImageData(W, W);
+  for (let y = 0; y < W; y++) for (let x = 0; x < W; x++) { const u = x / W * Math.PI * 2, v = y / W * Math.PI * 2; const hgt = Math.sin(u * 3 + v) * 0.35 + Math.sin(u * 7 - v * 5) * 0.2 + Math.sin(u * 13 + v * 11) * 0.12 + Math.sin(v * 9) * 0.15; const c = (hgt * 0.5 + 0.5) * 255; const i = (y * W + x) * 4; d.data[i] = d.data[i + 1] = d.data[i + 2] = c; d.data[i + 3] = 255; }
+  hc.g.putImageData(d, 0, 0); return tex(heightToNormal(hc.c, 1.6), false);
+}
+/** Brins d'herbe (touffe) avec alpha. */
+export function grassBlades(): THREE.Texture {
+  const W = 128; const { c, g } = canvas(W); g.clearRect(0, 0, W, W);
+  for (let i = 0; i < 70; i++) { const x = 10 + rnd() * 108, h = 50 + rnd() * 70, bend = (rnd() - 0.5) * 26; const v = 70 + rnd() * 70; g.strokeStyle = `rgba(${v * .7 | 0},${v + 30 | 0},${v * .4 | 0},1)`; g.lineWidth = 1.5 + rnd() * 1.5; g.beginPath(); g.moveTo(x, W); g.quadraticCurveTo(x + bend * 0.3, W - h * 0.6, x + bend, W - h); g.stroke(); }
+  const t = tex(c, true, false); t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping; return t;
 }

@@ -10,7 +10,7 @@ const MARKED = new Set(['motorway', 'trunk', 'primary', 'secondary', 'tertiary',
 const SIDEWALK = new Set(['primary', 'secondary', 'tertiary', 'residential', 'unclassified', 'living_street']);
 export const SW_W = 2.0, SW_H = 0.14;
 
-export interface RoadBuilders { marked: MeshBuilder; plain: MeshBuilder; paving: MeshBuilder; gravel: MeshBuilder; }
+export interface RoadBuilders { marked: MeshBuilder; plain: MeshBuilder; paving: MeshBuilder; gravel: MeshBuilder; marks: MeshBuilder; }
 
 const key = (p: Pt) => `${Math.round(p[0] * 2)},${Math.round(p[1] * 2)}`;
 
@@ -18,7 +18,7 @@ const key = (p: Pt) => `${Math.round(p[0] * 2)},${Math.round(p[1] * 2)}`;
 export function junctions(roads: Road[]) {
   const m = new Map<string, { i: number; w: number }[]>();
   roads.forEach((r, i) => {
-    const w = ROAD_W[r.t]; if (!w) return;
+    const w = ROAD_W[r.t]; if (!w || r.t === 'service' || r.t === 'track') return;   // les entrées de garage ne coupent pas le trottoir
     for (const p of r.p) { const k = key(p), l = m.get(k) ?? []; if (!l.some(e => e.i === i)) l.push({ i, w }); m.set(k, l); }
   });
   return m;
@@ -80,7 +80,12 @@ export function addRoadPiece(B: RoadBuilders, r: Road, piece: Pt[], cuts: [numbe
   const y = 0.03 + (RANK[r.t] ?? 0) * 0.012;
   addStrip(MARKED.has(r.t) ? B.marked : B.plain, piece, w / 2, y, 8, sBase);
   if (!SIDEWALK.has(r.t)) return;
-  const total = length(piece); let free: [number, number][] = [[0, total]];
+  const total = length(piece);
+  // passages piétons (bandes blanches) à l'entrée des carrefours des grands axes
+  if (MARKED.has(r.t)) for (const [c0, c1] of cuts) for (const sAt of [c0 - sBase + 0.6, c1 - sBase - 3.1]) {
+    if (sAt < 0 || sAt + 2.5 > total) continue; const seg = slice(piece, sAt, sAt + 2.5); if (seg.length < 2) continue; const a = seg[0], b = seg[seg.length - 1]; const l = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1; const dx = (b[0] - a[0]) / l, dz = (b[1] - a[1]) / l, nx = -dz, nz = dx;
+    for (let o = -w / 2 + 0.5; o <= w / 2 - 0.5; o += 1.0) { const P = (t: number, q: number) => [a[0] + dx * t + nx * q, y + 0.006, a[1] + dz * t + nz * q]; B.marks.planar([P(0, o + 0.25), P(2.5, o + 0.25), P(2.5, o - 0.25), P(0, o - 0.25)], [[0, 0], [1, 0], [1, 1], [0, 1]], null); }
+  } let free: [number, number][] = [[0, total]];
   for (const [c0, c1] of cuts) {
     const a = c0 - sBase, b = c1 - sBase; const next: [number, number][] = [];
     for (const [f0, f1] of free) { if (b <= f0 || a >= f1) next.push([f0, f1]); else { if (a > f0) next.push([f0, a]); if (b < f1) next.push([b, f1]); } }

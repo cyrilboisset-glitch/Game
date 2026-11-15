@@ -23,7 +23,7 @@ export class Car {
     this.root.add(this.body); this.refreshPaint(); if (this.lightsOn) this.setLights(true);
   }
   refreshPaint() { const dirt = 1 - Math.min(1, this.hp / this.spec.hp); this.mats.paint.color.set(this.paint).lerp(new THREE.Color(0x2a2522), dirt * 0.55); }
-  setLights(on: boolean) { this.lightsOn = on; for (const h of this.headlights) h.intensity = on ? 900 : 0; for (const b of this.beams) b.visible = on; }
+  setLights(on: boolean) { this.lightsOn = on; for (const h of this.headlights) h.intensity = on ? 420 : 0; for (const b of this.beams) b.visible = on; }
   /** Dégâts : retourne true si le véhicule vient de tomber en panne. */
   damage(amount: number) { const was = this.hp > 0; this.hp = Math.max(0, this.hp - amount / this.spec.mass); this.refreshPaint(); return was && this.hp <= 0; }
   repair() { this.hp = this.spec.hp; this.refreshPaint(); }

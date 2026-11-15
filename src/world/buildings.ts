@@ -10,7 +10,28 @@ const FLOOR_H = 3.0, BAY = 3.8;
 const CELL = { win: [0, 1], shut: [1, 1], lit: [2, 1], plain: [3, 1], door: [0, 0], shop: [1, 0] } as const;
 const cell = (k: keyof typeof CELL, u: number, v: number) => [(CELL[k][0] + u) / 4, (CELL[k][1] + v) / 2];
 
-export interface BuildBuilders { wall: MeshBuilder; roof: MeshBuilder; flat: MeshBuilder; }
+export interface BuildBuilders { wall: MeshBuilder; roof: MeshBuilder; flat: MeshBuilder; trim?: MeshBuilder; }
+
+/** Pavé orienté : F = direction de profondeur (fx,fz unitaire), largeur w le long de R = (fz,-fx). Faces extérieures, sans dessous. */
+export function orientedBox(b: MeshBuilder, cx: number, cz: number, fx: number, fz: number, w: number, d: number, h: number, y0: number, col: THREE.Color, bottom = false) {
+  const face = (gx: number, gz: number, eg: number, er: number, c: THREE.Color) => { const rx = gz, rz = -gx; const p0 = [cx + gx * eg - rx * er, y0, cz + gz * eg - rz * er], p1 = [cx + gx * eg + rx * er, y0, cz + gz * eg + rz * er]; b.planar([p0, p1, [p1[0], y0 + h, p1[2]], [p0[0], y0 + h, p0[2]]], [[0, 0], [1, 0], [1, 1], [0, 1]], c); };
+  const rx = fz, rz = -fx; face(fx, fz, d / 2, w / 2, col); face(-fx, -fz, d / 2, w / 2, col); face(rx, rz, w / 2, d / 2, col); face(-rx, -rz, w / 2, d / 2, col);
+  const top = col.clone().multiplyScalar(1.08), A = [cx - rx * w / 2 + fx * d / 2, y0 + h, cz - rz * w / 2 + fz * d / 2];
+  b.planar([A, [A[0] + rx * w, A[1], A[2] + rz * w], [A[0] + rx * w - fx * d, A[1], A[2] + rz * w - fz * d], [A[0] - fx * d, A[1], A[2] - fz * d]], [[0, 0], [1, 0], [1, 1], [0, 1]], top);
+  if (bottom) { const Bb = [cx - rx * w / 2 + fx * d / 2, y0, cz - rz * w / 2 + fz * d / 2]; b.planar([[Bb[0] - fx * d, y0, Bb[2] - fz * d], [Bb[0] + rx * w - fx * d, y0, Bb[2] + rz * w - fz * d], [Bb[0] + rx * w, y0, Bb[2] + rz * w], Bb], [[0, 0], [1, 0], [1, 1], [0, 1]], col.clone().multiplyScalar(0.7)); }
+}
+const STONE = new THREE.Color(0.5, 0.48, 0.45), CONCRETE = new THREE.Color(0.74, 0.73, 0.7), RAIL = new THREE.Color(0.13, 0.13, 0.14);
+/** Détails de façade : soubassement en pierre, corniche, balcons (immeubles). */
+function details(T: MeshBuilder, p: Pt[], h: number, floors: number, col: THREE.Color, seed: number, big: boolean, cornice: boolean) {
+  for (let i = 0; i < p.length; i++) {
+    const a = p[i], b = p[(i + 1) % p.length]; const len = Math.hypot(b[0] - a[0], b[1] - a[1]); if (len < 0.8) continue; const ex = (b[0] - a[0]) / len, ez = (b[1] - a[1]) / len; const nx = -ez, nz = ex;   // normale sortante
+    const mx = (a[0] + b[0]) / 2, mz = (a[1] + b[1]) / 2;
+    orientedBox(T, mx + nx * 0.03, mz + nz * 0.03, nx, nz, len + 0.06, 0.1, 0.55, 0, STONE);
+    if (cornice) orientedBox(T, mx + nx * 0.08, mz + nz * 0.08, nx, nz, len + 0.16, 0.2, 0.24, h - 0.24, col.clone().multiplyScalar(1.06), true);
+    if (big && floors >= 3 && len > 7) { const bays = Math.max(1, Math.round(len / BAY)); for (let f = 1; f < floors; f++) for (let k = 0; k < bays; k++) { if (((seed * 31 + i * 7 + k * 13) % 3) !== 0) continue; const t = (k + 0.5) / bays; const cx = a[0] + (b[0] - a[0]) * t, cz = a[1] + (b[1] - a[1]) * t; const y = f * (h / floors);
+      orientedBox(T, cx + nx * 0.5, cz + nz * 0.5, nx, nz, 2.4, 1.0, 0.14, y - 0.02, CONCRETE, true); orientedBox(T, cx + nx * 0.98, cz + nz * 0.98, nx, nz, 2.4, 0.05, 0.95, y + 0.12, RAIL); for (const sgn of [-1, 1]) orientedBox(T, cx + nx * 0.5 + ex * 1.18 * sgn, cz + nz * 0.5 + ez * 1.18 * sgn, nx, nz, 0.05, 0.95, 0.95, y + 0.12, RAIL); } }
+  }
+}
 
 function wallRun(B: BuildBuilders, p: Pt[], h: number, floors: number, col: THREE.Color, seedv: number) {
   // le polygone doit être anti-horaire dans le plan (x, -z) pour que les normales sortent
@@ -60,6 +81,7 @@ function gable(B: BuildBuilders, p: Pt[], h: number, roofCol: THREE.Color, wallC
   const rh = Math.min(w, d) * 0.32 + 0.6;
   const um = (u0 + u1) / 2, vm = (v0 + v1) / 2;
   const dirU = W(1, 0), dirV = W(0, 1);
+  if (B.trim) { const along2 = w >= d; const cu = along2 ? um + (u1 - u0) * 0.22 * (rnd() < 0.5 ? -1 : 1) : um + (u1 - u0) * 0.18, cv = along2 ? vm + (v1 - v0) * 0.18 : vm + (v1 - v0) * 0.22 * (rnd() < 0.5 ? -1 : 1); const q = W(cu, cv); const cc = wallCol.clone().multiplyScalar(0.85); orientedBox(B.trim, q[0], q[1], dirV[0], dirV[1], 0.55, 0.55, rh + 0.9, h + rh * 0.35, cc); orientedBox(B.trim, q[0], q[1], dirV[0], dirV[1], 0.68, 0.68, 0.12, h + rh * 1.25 + 0.55, new THREE.Color(0.25, 0.24, 0.23)); }
   if (along) {
     const r0 = P(u0, vm, h + rh), r1 = P(u1, vm, h + rh);
     const len = u1 - u0, sl = Math.hypot(vm - v0, rh);
@@ -97,8 +119,10 @@ export function addBuilding(B: BuildBuilders, b: Build, idx: number) {
   const h = b.h > 0 ? b.h : floors * FLOOR_H;
   const col = PLASTER[idx % PLASTER.length].clone().multiplyScalar(0.92 + rnd() * 0.12);
   wallRun(B, p, h, floors, col, idx);
+  const pre = obb(p); const preFill = Math.abs(a) / Math.max(1, pre.a);
   const o = obb(p); const fill = Math.abs(a) / Math.max(1, o.a);
   const useGable = Math.abs(a) < 420 && fill > 0.8 && p.length <= 10 && floors <= 4 && rnd() < 0.85;
+  if (B.trim) details(B.trim, p, h, floors, col, idx, Math.abs(a) > 180, !useGable || floors >= 3); void preFill;
   if (useGable) { gable(B, p, h, new THREE.Color().setHSL(0.03 + rnd() * 0.03, 0.2 + rnd() * 0.25, 0.65 + rnd() * 0.35), col); }
   else flatRoof(B, p, h);
   return true;

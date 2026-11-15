@@ -15,6 +15,9 @@ import { neutralSpots } from './missions/generator';
 import { AudioSys } from './audio/audio';
 import { AutoQuality, levelParams, type Level } from './core/quality';
 import { Settings } from './ui/settings';
+import { Post } from './core/post';
+import { GroundMask } from './world/mask';
+import { GrassField } from './world/grass';
 import { SPECS, CIVIL_TYPES, PAINTS } from './vehicles/specs';
 import { Player } from './player/player';
 import { AvatarFactory } from './player/avatar';
@@ -35,10 +38,11 @@ renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); renderer.setSize(innerWid
 renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap; document.body.appendChild(renderer.domElement);
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(62, innerWidth / innerHeight, 0.3, 2600);
+const camera = new THREE.PerspectiveCamera(62, innerWidth / innerHeight, 0.3, 6000);
 const mats = createMaterials(); const env = new Environment(renderer, scene, mats);
 const ground = new THREE.Mesh(new THREE.PlaneGeometry(6000, 6000).rotateX(-Math.PI / 2), mats.ground); ground.receiveShadow = true; scene.add(ground);
-addEventListener('resize', () => { renderer.setSize(innerWidth, innerHeight); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); });
+const post = new Post(renderer, scene, camera);
+addEventListener('resize', () => { renderer.setSize(innerWidth, innerHeight); post.setSize(innerWidth, innerHeight); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); });
 
 const [world, pois, addrs] = await Promise.all([loadWorld(), loadPoi(), loadAddresses()]);
 const chunks = new Chunks(world, mats, scene); const signs = new Signs(pois, scene);
@@ -48,6 +52,7 @@ const player = new Player(); player.attach(avatars); scene.add(player.root);
 
 const av = world.roads.filter(r => r.n === 'Avenue de la Gare' && r.t === 'secondary').sort((a, b) => b.p.length - a.p.length)[0];
 const si = parseInt(q.get('s') ?? '2'); const a = av.p[si], b = av.p[si + 1];
+{ const t0 = performance.now(); chunks.mask = new GroundMask(world, a[0], a[1]); console.info(`carte d'occupation : ${(performance.now() - t0).toFixed(0)} ms`); }
 const input = new Input(renderer.domElement); const hud = new Hud(); const minimap = new Minimap(world, pois);
 const game = new Game(world, pois, car, player, input, hud, parseFloat(q.get('t') ?? '9'), { x: a[0], z: a[1], h: Math.atan2(b[0] - a[0], b[1] - a[1]) }, scene);
 if (q.has('freeze')) game.clock.scale = 0;
@@ -75,12 +80,12 @@ mpanel.onAccept = o => game.startOffer(o); mpanel.onAbandon = () => { game.missi
 game.attachMissions({ commerces: spotsOf(['supermarket', 'bakery', 'butcher', 'greengrocer', 'pastry', 'variety_store', 'clothes', 'florist', 'books', 'convenience']), bureaux: spotsOf(['bank', 'estate_agent', 'employment_agency', 'insurance', 'lawyer', 'townhall', 'government', 'accountant', 'company']), neutres, nodes });
 const beacon = new THREE.Group(); { const m = new THREE.MeshBasicMaterial({ color: 0xffd34a, transparent: true, opacity: 0.28, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false }); beacon.add(new THREE.Mesh(new THREE.CylinderGeometry(1.3, 1.3, 70, 20, 1, true).translate(0, 35, 0), m), new THREE.Mesh(new THREE.RingGeometry(1.6, 2.4, 28).rotateX(-Math.PI / 2).translate(0, 0.25, 0), new THREE.MeshBasicMaterial({ color: 0xffd34a, transparent: true, opacity: 0.8, depthWrite: false, fog: false }))); beacon.visible = false; scene.add(beacon); }
 // audio, qualité, réglages
-const audio = new AudioSys(); const settings = new Settings(); const touchDev = matchMedia('(pointer: coarse)').matches;
+const grass = new GrassField(scene, chunks.mask!); const audio = new AudioSys(); const settings = new Settings(); const touchDev = matchMedia('(pointer: coarse)').matches;
 const quality = new AutoQuality(touchDev ? 'moyen' : 'eleve'); game.sfx = (n, v) => audio.sfx(n, v);
 function applyQuality(l: Level) {
-  const p = levelParams(l); renderer.setPixelRatio(p.pixelRatio); renderer.setSize(innerWidth, innerHeight);
+  const p = levelParams(l); renderer.setPixelRatio(p.pixelRatio); renderer.setSize(innerWidth, innerHeight); post.setLevel(l === 'bas' ? 'aucun' : l === 'moyen' ? 'moyen' : 'eleve'); post.setSize(innerWidth, innerHeight);
   env.sun.castShadow = p.shadows; if (env.sun.shadow.mapSize.x !== p.shadowSize) { env.sun.shadow.mapSize.set(p.shadowSize, p.shadowSize); env.sun.shadow.map?.dispose(); (env.sun.shadow as any).map = null; }
-  if (!q.has('r')) VIEW = p.view; VEH_RANGE = p.vehicleRange; shadowRange = p.shadows ? p.shadowRange : 0; npcRender.limits = { pedMax: p.pedMax, avatars: p.avatars, range: p.npcRange }; traffic.count = p.trafficMax;
+  if (!q.has('r')) VIEW = p.view; grass.enabled = l !== 'bas'; VEH_RANGE = p.vehicleRange; shadowRange = p.shadows ? p.shadowRange : 0; npcRender.limits = { pedMax: p.pedMax, avatars: p.avatars, range: p.npcRange }; traffic.count = p.trafficMax;
 }
 settings.onQuality = qv => { if (qv === 'auto') { quality.auto = true; } else { quality.auto = false; quality.set(qv); applyQuality(qv); } };
 settings.onVolume = v => audio.setVolume(v); settings.onMute = m => audio.setMuted(m); audio.setVolume(settings.volume); audio.setMuted(settings.muted);
@@ -138,11 +143,13 @@ function frame(now: number) {
   for (const d of npcRender.drivers) { const n = game.npcs.get(d.id)!; const t = n.seed % 9 === 0 ? 'utilitaire' : CIVIL_TYPES[n.seed % CIVIL_TYPES.length]; vrender.add(t, PAINTS[(n.seed >> 3) % PAINTS.length], d.x, d.z, d.h); }
   vrender.end(); car.setFlash(false);
   if (game.mode === 'car') hud.vehicle(car.spec.nom, Math.round(Math.abs(car.speed) * 3.6), Math.round(car.hp / car.spec.hp * 100), car.upgrade); else hud.hideVehicle();
-  const { night } = env.set(game.clock.hour, os ? new THREE.Vector3(os.x, 0, os.z) : game.pos); if (game.interior.inside) renderer.toneMappingExposure = 0.95;
+  const { night, sunset } = env.set(game.clock.hour, os ? new THREE.Vector3(os.x, 0, os.z) : game.pos); if (game.interior.inside) renderer.toneMappingExposure = 0.95;
   if (night > 0.2 && !car.lightsOn && !car.headlights[0].intensity) car.setLights(true); if (night <= 0.2 && car.lightsOn) car.setLights(false);
-  if (night > 0.2) { const near = chunks.lamps.filter(l => Math.hypot(l.x - game.pos.x, l.z - game.pos.z) < 90).sort((p, q2) => p.distanceToSquared(game.pos) - q2.distanceToSquared(game.pos)); lampLights.forEach((l, i) => { const p = near[i]; l.intensity = p ? 450 : 0; if (p) l.position.set(p.x, 6.6, p.z); }); } else lampLights.forEach(l => (l.intensity = 0));
+  if (night > 0.2) { const near = chunks.lamps.filter(l => Math.hypot(l.x - game.pos.x, l.z - game.pos.z) < 90).sort((p, q2) => p.distanceToSquared(game.pos) - q2.distanceToSquared(game.pos)); lampLights.forEach((l, i) => { const p = near[i]; l.intensity = p ? 140 : 0; if (p) l.position.set(p.x, 6.6, p.z); }); } else lampLights.forEach(l => (l.intensity = 0));
+  grass.update(dt, fx, fz); if (mats.water.normalMap) { mats.water.normalMap.offset.x += dt * 0.012; mats.water.normalMap.offset.y += dt * 0.007; }
   if (now - lastShadow > 700) { lastShadow = now; chunks.setShadowRange(fx, fz, shadowRange); }
-  renderer.render(game.interior.inside ? game.interior.scene! : scene, camera);
+  renderer.info.autoReset = false; renderer.info.reset();
+  post.render(game.interior.inside ? game.interior.scene! : scene, camera, dt, game.interior.inside ? 0 : night, game.interior.inside ? 0 : sunset);
   audio.update(dt, { inCar: game.mode === 'car' && !game.interior.inside, speed: car.speed, throttle: Math.max(0, input.y), slip: car.slip, dead: car.dead, footSpeed: player.speed, inside: game.interior.inside, night: night > 0.4, policeDist: police.nearest, alert: game.heat.stars > 0, horn: input.horn });
   settings.setStats(`FPS ${Math.round(quality.fps)} · niveau ${quality.level}${quality.auto ? ' (auto)' : ''}<br>appels ${renderer.info.render.calls} · triangles ${(renderer.info.render.triangles / 1000).toFixed(0)} k · chunks ${chunks.loaded.size}`);
   frames++; fpsT += dt; if (fpsT > 0.5) { fps = Math.round(frames / fpsT); frames = 0; fpsT = 0; }

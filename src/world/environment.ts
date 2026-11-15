@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { Sky } from 'three/examples/jsm/objects/Sky.js';
 import type { Materials } from './materials';
+import { Landscape } from './landscape';
 
 const NIGHT_VERT = 'varying vec3 vDir; void main(){ vDir = normalize(position); vec4 p = modelViewMatrix * vec4(position,1.0); gl_Position = projectionMatrix * p; gl_Position.z = gl_Position.w; }';
 const NIGHT_FRAG = `varying vec3 vDir; uniform float uAlpha; uniform vec3 uMoon;
@@ -18,11 +19,11 @@ void main(){
 export class Environment {
   sky = new Sky(); sun = new THREE.DirectionalLight(0xffffff, 3); hemi = new THREE.HemisphereLight(0xaac8ff, 0x556044, 0.6);
   nightDome: THREE.Mesh; private pm: THREE.PMREMGenerator; private envRT?: THREE.WebGLRenderTarget; private lastEnvHour = -99;
-  fog = new THREE.FogExp2(0xbcd0e0, 0.0011);
+  fog = new THREE.FogExp2(0xbcd0e0, 0.0011); land: Landscape; private lastT = performance.now();
   constructor(private renderer: THREE.WebGLRenderer, private scene: THREE.Scene, private mats: Materials) {
     this.sky.scale.setScalar(5000); scene.add(this.sky);
     this.nightDome = new THREE.Mesh(new THREE.SphereGeometry(4000, 32, 16), new THREE.ShaderMaterial({ vertexShader: NIGHT_VERT, fragmentShader: NIGHT_FRAG, side: THREE.BackSide, transparent: true, depthWrite: false, fog: false, uniforms: { uAlpha: { value: 0 }, uMoon: { value: new THREE.Vector3(-0.4, 0.6, 0.5) } } }));
-    this.nightDome.renderOrder = -1; scene.add(this.nightDome);
+    this.nightDome.renderOrder = -2; scene.add(this.nightDome); this.land = new Landscape(scene);
     this.sun.castShadow = true; this.sun.shadow.mapSize.set(2048, 2048);
     const c = this.sun.shadow.camera; c.left = -90; c.right = 90; c.top = 90; c.bottom = -90; c.near = 1; c.far = 500; this.sun.shadow.bias = -0.0004; this.sun.shadow.normalBias = 0.04;
     scene.add(this.sun, this.sun.target, this.hemi); scene.fog = this.fog; this.pm = new THREE.PMREMGenerator(renderer);
@@ -50,12 +51,14 @@ export class Environment {
     this.hemi.intensity = THREE.MathUtils.lerp(0.22, 0.75, day); this.hemi.color.set(day > 0.5 ? 0xb4cff2 : 0x4a5fa0);
     const fogC = new THREE.Color().lerpColors(new THREE.Color(0x070b18), new THREE.Color(0xc9d8e6), day); if (day < 1 && night < 0.5) fogC.lerp(new THREE.Color(0xd9a87c), 0.35 * (1 - day));
     this.fog.color.copy(fogC); this.fog.density = THREE.MathUtils.lerp(0.0016, 0.0010, day);
-    this.renderer.toneMappingExposure = THREE.MathUtils.lerp(1.0, 0.65, day);
-    this.mats.lampHead.emissiveIntensity = night > 0.25 ? 7 : 0; this.mats.wall.emissiveIntensity = THREE.MathUtils.lerp(0, 1.4, night);
+    this.renderer.toneMappingExposure = THREE.MathUtils.lerp(0.85, 0.65, day);
+    this.mats.lampHead.emissiveIntensity = night > 0.25 ? 4 : 0; this.mats.wall.emissiveIntensity = THREE.MathUtils.lerp(0, 0.75, night);
     if (Math.abs(hour - this.lastEnvHour) > 0.4) {
       this.lastEnvHour = hour; const s = new THREE.Scene(); const sk = new Sky(); sk.scale.setScalar(5000); sk.material.uniforms = THREE.UniformsUtils.clone(this.sky.material.uniforms); s.add(sk);
       this.envRT?.dispose(); this.envRT = this.pm.fromScene(s, 0, 0.1, 1000); this.scene.environment = this.envRT.texture; this.scene.environmentIntensity = THREE.MathUtils.lerp(0.05, 0.5, day);
     }
-    return { day, night };
+    const now = performance.now(); const dt = Math.min(0.1, (now - this.lastT) / 1000); this.lastT = now;
+    this.land.update(dt, focus, lightDir, this.sun.color, this.sun.intensity, this.fog.color, day, night);
+    return { day, night, sunset: Math.max(0, 1 - Math.abs(e) * 4.5) * (e > -0.08 ? 1 : 0) };
   }
 }

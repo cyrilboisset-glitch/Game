@@ -4,7 +4,7 @@ const dpr = () => (typeof devicePixelRatio === 'number' ? devicePixelRatio : 1);
 /** Trois niveaux de qualité : résolution, ombres, distance d'affichage, nombre de silhouettes/avatars/voitures. */
 export const levelParams = (l: Level): QualityParams => ({
   bas: { pixelRatio: Math.min(dpr(), 1) * 0.8, shadows: false, shadowSize: 512, shadowRange: 0, view: 280, vehicleRange: 170, npcRange: 110, pedMax: 70, avatars: 2, trafficMax: 14 },
-  moyen: { pixelRatio: Math.min(dpr(), 1.5), shadows: true, shadowSize: 1024, shadowRange: 110, view: 380, vehicleRange: 230, npcRange: 150, pedMax: 200, avatars: 4, trafficMax: 26 },
+  moyen: { pixelRatio: Math.min(dpr(), 1.5), shadows: true, shadowSize: 1024, shadowRange: 75, view: 340, vehicleRange: 230, npcRange: 150, pedMax: 200, avatars: 4, trafficMax: 26 },
   eleve: { pixelRatio: Math.min(dpr(), 2), shadows: true, shadowSize: 2048, shadowRange: 150, view: 480, vehicleRange: 280, npcRange: 190, pedMax: 450, avatars: 5, trafficMax: 40 },
 }[l]);
 const ORDER: Level[] = ['bas', 'moyen', 'eleve'];
