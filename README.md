@@ -67,3 +67,9 @@ Le jeu est publié automatiquement sur GitHub Pages à chaque push sur la branch
 2. Sur le téléphone, ouvrir https://cyrilboisset-glitch.github.io/Game/ dans Chrome, attendre le message « Jeu enregistré sur l'appareil ».
 3. Menu ⋮ → « Ajouter à l'écran d'accueil » / « Installer l'application ». Le jeu se lance ensuite en plein écran, sans internet.
 Hors ligne : service worker généré par tools/gen-sw.mjs (met en cache tous les fichiers du build, ~6,4 Mo). Pour une mise à jour, rouvrir le jeu avec internet.
+
+## Collisions
+Piéton : bâtiments, véhicules (garés, circulation, gendarmerie, voitures des habitants, la sienne), arbres, lampadaires, bancs, poubelles, panneaux, haies, murets, habitants. Renversé (santé −8 à −48, au sol 2,5 s, pas de mort) si un véhicule le touche à plus de 15 km/h.
+Circulation : les voitures freinent et s'arrêtent devant le joueur à pied et devant les habitants sur la chaussée (on peut ainsi arrêter une voiture puis la voler avec E).
+Voiture du joueur : bâtiments, mobilier et arbres (dégâts), véhicules, voitures des habitants, habitants (adulte renversé = délit ; un mineur n'est jamais touché, la voiture s'arrête net).
+Scénario de vérification : `node tools/collisions.cjs <dossier>`. Limite : les voitures simulées des habitants ne s'évitent pas entre elles.

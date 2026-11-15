@@ -5,6 +5,7 @@ import { addBuilding, type BuildBuilders } from './buildings';
 import { addRoadPiece, addRail, addStrip, junctions, sidewalkCuts, splitGrid, ROAD_W, PATH_TYPES, type RoadBuilders } from './roads';
 import { addTree, addLamp, addConifer, addBush, addFence, addBench, addBin, addSign } from './props';
 import type { GroundMask } from './mask';
+import { PropColliders, propSink, type Sink } from './solids';
 import { area, centroid, length, pointInPoly, slice, type Pt } from './geom';
 import { rnd, reseed } from './textures';
 import type { Materials } from './materials';
@@ -15,7 +16,7 @@ const cOf = (x: number, y: number) => [Math.floor(x / CHUNK), Math.floor(y / CHU
 
 export class Chunks {
   grid = new Map<string, Raw>(); loaded = new Map<string, THREE.Group>(); lamps: THREE.Vector3[] = [];
-  mask?: GroundMask;
+  mask?: GroundMask; props = new PropColliders();
   constructor(private w: WorldData, private mats: Materials, private scene: THREE.Scene) { this.index(); }
   private raw(k: string): Raw { let r = this.grid.get(k); if (!r) { r = { builds: [], roads: [], rails: [], waters: [], greens: [] }; this.grid.set(k, r); } return r; }
 
@@ -34,7 +35,7 @@ export class Chunks {
 
   private make(cx: number, cy: number): THREE.Group {
     reseed(((cx * 73856093) ^ (cy * 19349663)) >>> 0 || 1); const raw = this.grid.get(ck(cx, cy)); const g = new THREE.Group(); g.name = ck(cx, cy);
-    if (!raw) return g;
+    if (!raw) return g; const sink: Sink = { c: [], s: [] }; propSink.cur = sink; this.props.set(ck(cx, cy), sink);
     const m = this.mats;
     const BB: BuildBuilders = { wall: new MeshBuilder(), roof: new MeshBuilder(), flat: new MeshBuilder(), trim: new MeshBuilder() };
     const RB: RoadBuilders = { marked: new MeshBuilder(), plain: new MeshBuilder(), paving: new MeshBuilder(), gravel: new MeshBuilder(), marks: new MeshBuilder() };
@@ -83,7 +84,7 @@ export class Chunks {
       for (const rr of raw.roads) {   // mobilier urbain : bancs + poubelles le long des axes, panneaux aux carrefours
         const road = this.w.roads[rr.ri]; if (!['primary', 'secondary', 'tertiary', 'residential', 'unclassified'].includes(road.t)) continue; const hw = ROAD_W[road.t] / 2; const total = length(rr.piece);
         const at = (sAt: number) => { const sg = slice(rr.piece, sAt, sAt + 0.5); if (sg.length < 2) return null; const a = sg[0], b = sg[sg.length - 1]; const l = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1; return { x: a[0], z: a[1], dx: (b[0] - a[0]) / l, dz: (b[1] - a[1]) / l }; };
-        if (road.t !== 'residential' && road.t !== 'unclassified') for (let sAt = 20 + rnd() * 30; sAt < total - 2; sAt += 55 + rnd() * 40) { const p = at(sAt); if (!p) continue; const side = rnd() < 0.5 ? 1 : -1; const bx = p.x - p.dz * (hw + 1.7) * side, bz = p.z + p.dx * (hw + 1.7) * side; if (M.get(bx, bz) === 2) continue; addBench(solids, bx, bz, p.dz * side, -p.dx * side); addBin(solids, bx + p.dx * 1.4, bz + p.dz * 1.4); }
+        if (road.t !== 'residential' && road.t !== 'unclassified') for (let sAt = 20 + rnd() * 30; sAt < total - 2; sAt += 55 + rnd() * 40) { const p = at(sAt); if (!p) continue; const side = rnd() < 0.5 ? 1 : -1; const bx = p.x - p.dz * (hw + 2.3) * side, bz = p.z + p.dx * (hw + 2.3) * side; if (M.get(bx, bz) === 2) continue; addBench(solids, bx, bz, p.dz * side, -p.dx * side); addBin(solids, bx + p.dx * 1.4, bz + p.dz * 1.4); }
         if (road.t === 'residential' || road.t === 'unclassified') for (const [c0] of ((road as any)._cuts as [number, number][]) ?? []) { const sAt = c0 - rr.sBase - 0.5; if (sAt < 0 || sAt > total - 1 || rnd() > 0.35) continue; const p = at(sAt); if (!p) continue; addSign(poles, solids, p.x - p.dz * (hw + 0.5), p.z + p.dx * (hw + 0.5), p.dx, p.dz, rnd() < 0.4); }
       }
       for (const rr of raw.roads) {
@@ -97,7 +98,7 @@ export class Chunks {
     add(BB.wall, m.wall, true); add(BB.roof, m.roof, true); add(BB.flat, m.flat, true); add(BB.trim!, m.bark, true);
     add(RB.marked, m.asphaltMarked); add(RB.plain, m.asphalt); add(RB.paving, m.pavement); add(RB.gravel, m.gravel); add(RB.marks, m.marks);
     add(ground, m.greens); add(water, m.water, false); add(trees, m.bark, true); add(leaves, m.leaves, true); add(poles, m.metal, true); add(heads, m.lampHead, false, false); add(hedges, m.hedge, true); add(solids, m.bark, true);
-    return g;
+    propSink.cur = null; return g;
   }
 
   /** Seuls les chunks proches projettent des ombres (économie de passes de rendu). range = 0 : aucune. */
@@ -111,7 +112,7 @@ export class Chunks {
       const k = ck(cx + dx, cy + dy); want.add(k);
       if (!this.loaded.has(k)) { const g = this.make(cx + dx, cy + dy); this.scene.add(g); this.loaded.set(k, g); }
     }
-    for (const [k, g] of this.loaded) if (!want.has(k)) { this.scene.remove(g); g.traverse(o => { if ((o as THREE.Mesh).geometry) (o as THREE.Mesh).geometry.dispose(); }); this.loaded.delete(k); }
+    for (const [k, g] of this.loaded) if (!want.has(k)) { this.props.remove(k); this.scene.remove(g); g.traverse(o => { if ((o as THREE.Mesh).geometry) (o as THREE.Mesh).geometry.dispose(); }); this.loaded.delete(k); }
   }
 }
 export const _unused = { PATH_TYPES, addStrip };

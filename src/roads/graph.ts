@@ -14,7 +14,7 @@ export class RoadGraph {
   pts: Pt[] = []; adj: Edge[][] = []; private idx = new Map<string, number>(); private grid = new Map<string, number[]>(); private cache = new Map<string, number[] | null>();
   constructor(roads: Road[]) {
     for (const r of roads) {
-      const ped = !NO_PED.has(r.t), veh = !NO_VEH.has(r.t); if (!ped && !veh) continue; const off = (HALF[r.t] ?? 0) + (HALF[r.t] ? 1.0 : 0); const lim = LIMIT[r.t] ?? 8; const lane = (HALF[r.t] ?? 3) * 0.5;
+      const ped = !NO_PED.has(r.t), veh = !NO_VEH.has(r.t); if (!ped && !veh) continue; const off = (HALF[r.t] ?? 0) + (HALF[r.t] ? 1.4 : 0); const lim = LIMIT[r.t] ?? 8; const lane = (HALF[r.t] ?? 3) * 0.5;
       for (let i = 0; i < r.p.length - 1; i++) { const a = this.node(r.p[i]), b = this.node(r.p[i + 1]); if (a === b) continue; const w = Math.hypot(r.p[i][0] - r.p[i + 1][0], r.p[i][1] - r.p[i + 1][1]); this.adj[a].push({ to: b, w, off, ped, veh, lim, lane, vr: veh }); this.adj[b].push({ to: a, w, off, ped, veh: veh && !r.o, lim, lane, vr: veh }); }   // sens unique : le sens inverse n'est ouvert qu'aux piétons
     }
   }

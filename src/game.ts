@@ -12,6 +12,8 @@ import type { Police } from './police/police';
 import { Missions } from './missions/missions';
 import { makeOffers, type Offer, type GenCtx } from './missions/generator';
 import { witnessFactor, fineFor } from './police/rules';
+import { circleVsBox, type PropColliders } from './world/solids';
+import type { VehicleType } from './vehicles/specs';
 import { Player } from './player/player';
 import { Needs } from './survival/needs';
 import { Heat } from './survival/heat';
@@ -31,13 +33,35 @@ export type Mode = 'foot' | 'car';
 export class Game {
   mode: Mode = 'foot'; sleeping = false; money = 40; inv = { nourriture: 1, eau: 1 }; looted = new Set<string>();
   needs = new Needs(); heat = new Heat(); clock: Clock; coll: Collision;
-  vehicles!: VehicleWorld; traffic!: Traffic; smoke?: Smoke; tireSmoke?: Smoke; fx?: Effects; police?: Police; missions = new Missions(); offers: Offer[] = []; private mbase?: Omit<GenCtx, 'day' | 'rep' | 'at' | 'seed'>; private offerDay = -1; boarded: number | null = null; dealerSel = 0; onMissionsKey: () => void = () => {}; sfx: (n: string, v?: number) => void = () => {}; onOffers: () => void = () => {}; private ramT = 0; private speedMsg = 0; interior!: InteriorManager; observed: Npc | null = null; npcs = new Map<number, Npc>(); sim?: NpcSim; states = new Map<number, NpcState>(); talkCount = 0; camYaw = 0; camPitch = 0.28; private saveT = 0; private ctl: Controls = { throttle: 0, brake: 0, steer: 0, handbrake: false };
+  vehicles!: VehicleWorld; traffic!: Traffic; smoke?: Smoke; tireSmoke?: Smoke; fx?: Effects; police?: Police; missions = new Missions(); offers: Offer[] = []; private mbase?: Omit<GenCtx, 'day' | 'rep' | 'at' | 'seed'>; private offerDay = -1; boarded: number | null = null; props?: PropColliders; npcCars: { x: number; z: number; h: number; speed: number; type: VehicleType }[] = []; knocked = new Map<number, { until: number; dx: number; dz: number; h: number }>(); downT = 0; private t = 0; dealerSel = 0; onMissionsKey: () => void = () => {}; sfx: (n: string, v?: number) => void = () => {}; onOffers: () => void = () => {}; private ramT = 0; private speedMsg = 0; interior!: InteriorManager; observed: Npc | null = null; npcs = new Map<number, Npc>(); sim?: NpcSim; states = new Map<number, NpcState>(); talkCount = 0; camYaw = 0; camPitch = 0.28; private saveT = 0; private ctl: Controls = { throttle: 0, brake: 0, steer: 0, handbrake: false };
   constructor(public world: WorldData, public pois: Poi[], public car: Car, public player: Player, public input: Input, public hud: Hud, startHour: number, private start: { x: number; z: number; h: number }, scene: THREE.Scene) {
     this.clock = new Clock(startHour); this.coll = new Collision(world.builds); this.respawn(false);
     this.interior = new InteriorManager(this, new BuildingIndex(world.builds, pois), scene);
   }
   attachVehicles(vw: VehicleWorld, tr: Traffic, smoke: Smoke, tire?: Smoke, fx?: Effects) { this.vehicles = vw; this.traffic = tr; this.smoke = smoke; this.tireSmoke = tire; this.fx = fx; }
-  private obstacles(): Obstacle[] { const o: Obstacle[] = [{ x: this.car.pos.x, z: this.car.pos.z, h: this.car.heading, speed: this.car.speed, L: this.car.spec.L }]; for (const u of this.police?.units ?? []) o.push({ x: u.v.x, z: u.v.z, h: u.v.h, speed: u.v.speed, L: SPECS[u.v.type].L }); return o; }
+  private obstacles(): Obstacle[] { const o: Obstacle[] = [{ x: this.car.pos.x, z: this.car.pos.z, h: this.car.heading, speed: this.car.speed, L: this.car.spec.L }]; if (this.mode === 'foot' && !this.interior.inside) o.push({ x: this.player.pos.x, z: this.player.pos.z, h: this.player.heading, speed: 0, L: 1.2 }); for (const w of this.walkersNear(this.pos.x, this.pos.z, 160)) o.push({ x: w.x, z: w.z, h: w.h, speed: 0, L: 1.2 }); for (const u of this.police?.units ?? []) o.push({ x: u.v.x, z: u.v.z, h: u.v.h, speed: u.v.speed, L: SPECS[u.v.type].L }); return o; }
+  /** Véhicules proches sous forme de boîtes orientées (garés, circulation, gendarmerie, voitures des habitants, et la sienne quand on est à pied). */
+  vehicleBoxes(x: number, z: number, r: number, includeOwn: boolean) {
+    const out: { x: number; z: number; h: number; hl: number; hw: number; speed: number; v?: WVehicle }[] = [];
+    for (const v of this.vehicles.near(x, z, r)) { const sp = SPECS[v.type]; out.push({ x: v.x, z: v.z, h: v.h, hl: sp.L / 2, hw: sp.W / 2, speed: v.speed, v }); }
+    for (const d of this.npcCars) if (Math.abs(d.x - x) < r && Math.abs(d.z - z) < r) { const sp = SPECS[d.type]; out.push({ x: d.x, z: d.z, h: d.h, hl: sp.L / 2, hw: sp.W / 2, speed: d.speed }); }
+    if (includeOwn) out.push({ x: this.car.pos.x, z: this.car.pos.z, h: this.car.heading, hl: this.car.spec.L / 2, hw: this.car.spec.W / 2, speed: this.car.speed });
+    return out;
+  }
+  /** Habitants à pied (renversés exclus) près d'un point. */
+  walkersNear(x: number, z: number, r: number) { const out: { id: number; x: number; z: number; h: number; speed: number; minor: boolean }[] = []; for (const s of this.states.values()) { if ((s.kind !== 'marche' && s.kind !== 'dehors') || this.knocked.has(s.id)) continue; if (Math.abs(s.x - x) > r || Math.abs(s.z - z) > r) continue; out.push({ id: s.id, x: s.x, z: s.z, h: s.h, speed: s.speed, minor: this.npcs.get(s.id)?.minor ?? false }); } return out; }
+  /** Renverse un habitant (adulte) : il reste au sol quelques secondes, décalé dans la direction du choc. */
+  knock(id: number, dx: number, dz: number, h: number) { this.knocked.set(id, { until: this.t + 6, dx, dz, h }); }
+  /** Collisions du piéton : bâtiments, mobilier/végétation, véhicules (renversé si l'un d'eux arrive vite), habitants. */
+  private footCollide() {
+    const p = this.player, pos = p.pos as unknown as { x: number; z: number }; if (this.props) this.props.resolve(pos, p.radius);
+    for (const b of this.vehicleBoxes(p.pos.x, p.pos.z, 8, this.mode === 'foot')) {
+      const hit = circleVsBox(p.pos.x, p.pos.z, p.radius, b.x, b.z, b.h, b.hl, b.hw); if (!hit) continue; p.pos.x += hit.x; p.pos.z += hit.z;
+      if (Math.abs(b.speed) > 4 && this.downT <= 0) { const k = Math.min(1, Math.abs(b.speed) / 15); this.downT = 2.5; this.needs.s.sante = Math.max(1, this.needs.s.sante - (8 + 40 * k)); const fx = Math.sin(b.h) * Math.sign(b.speed), fz = Math.cos(b.h) * Math.sign(b.speed); p.pos.x += fx * 1.5 * k; p.pos.z += fz * 1.5 * k; p.heading = b.h + Math.PI; this.sfx('crash', k * 0.6); this.hud.toast('Vous êtes renversé par une voiture !', 3); if (b.v) { b.v.stun = 3; b.v.speed *= 0.3; } }
+    }
+    for (const w of this.walkersNear(p.pos.x, p.pos.z, 3)) { const dx = p.pos.x - w.x, dz = p.pos.z - w.z, d = Math.hypot(dx, dz), m = p.radius + 0.32; if (d < m && d > 1e-4) { p.pos.x += dx / d * (m - d); p.pos.z += dz / d * (m - d); } }
+    this.coll.resolve(pos, p.radius);
+  }
   /** Délit : n'est comptabilisé qu'en proportion de ce qui a été vu (gendarmerie à portée, témoin, personne). */
   crime(v: number) {
     let npcD: number | null = null; const px = this.pos.x, pz = this.pos.z;
@@ -139,6 +163,7 @@ export class Game {
       if (inp.hit('Escape', 'quit')) this.stopObserving(); this.clock.tick(dt); this.hud.veil(0); this.hud.tick(dt); this.hud.prompt('Échap : quitter l\'observation'); return;
     }
     this.interior.tick(dt);
+    this.t += dt; for (const [id, k] of this.knocked) if (k.until < this.t) this.knocked.delete(id);
     if (this.interior.inside) this.interior.update(dt); else if (this.sleeping) this.updateSleep(dt); else if (this.mode === 'car') this.updateCar(dt); else this.updateFoot(dt);
     if (this.sleeping && !this.interior.inside && Math.random() < dt * 0.02) { this.wake(); this.crime(12); this.hud.toast('Du bruit vous réveille : on vous a repéré.'); }
     if (this.sleeping && (inp.hit('KeyR', 'sleep') || this.needs.s.energie >= 98)) this.wake();
@@ -154,8 +179,9 @@ export class Game {
   private updateSleep(dt: number) { this.clock.scale = 12; this.car.update(dt, { throttle: 0, brake: 0, steer: 0, handbrake: true }); }
   private updateFoot(dt: number) {
     const inp = this.input, p = this.player;
-    p.update(dt, inp.x, inp.y, this.camYaw, inp.run, this.needs.speedFactor);
-    this.coll.resolve(p.pos as any, p.radius);
+    if (this.downT > 0) { this.downT -= dt; p.update(dt, 0, 0, this.camYaw, false, 1); } else p.update(dt, inp.x, inp.y, this.camYaw, inp.run, this.needs.speedFactor);
+    this.coll.resolve(p.pos as any, p.radius); this.footCollide();
+    p.root.rotation.order = 'YXZ'; p.root.rotation.x = this.downT > 0 ? -Math.PI / 2 * Math.min(1, (2.5 - this.downT) * 6, this.downT * 3) : 0;
     p.root.position.copy(p.pos); this.car.update(dt, { throttle: 0, brake: 0, steer: 0, handbrake: true }); this.collideCar();
     const dCar = Math.hypot(this.car.pos.x - p.pos.x, this.car.pos.z - p.pos.z);
     if (inp.hit('KeyE', 'action')) {
@@ -183,6 +209,16 @@ export class Game {
     const c = this.car, fx = Math.sin(c.heading), fz = Math.cos(c.heading); let hit = 0; const v0 = Math.abs(c.speed);
     for (const o of [-c.spec.L * 0.3, 0, c.spec.L * 0.3]) { const q = { x: c.pos.x + fx * o, z: c.pos.z + fz * o }; const r = this.coll.resolve(q, c.spec.W / 2 + 0.1); if (r.depth > 0) { c.pos.x += q.x - (c.pos.x + fx * o); c.pos.z += q.z - (c.pos.z + fz * o); hit = Math.max(hit, r.depth); } }
     if (hit > 0.02) { c.speed *= 1 - Math.min(0.6, hit * 3) * 0.5; if (v0 > 4) this.crash(Math.min(1, hit * 2.5) * v0 * 1.4); }
+    // mobilier, arbres, poteaux
+    if (this.props) for (const o of [-c.spec.L * 0.3, 0, c.spec.L * 0.3]) { const q = { x: c.pos.x + fx * o, z: c.pos.z + fz * o }; const r = this.props.resolve(q, c.spec.W / 2); if (r.depth > 0) { c.pos.x += q.x - (c.pos.x + fx * o); c.pos.z += q.z - (c.pos.z + fz * o); const sp0 = Math.abs(c.speed); c.speed *= 0.4; if (sp0 > 4) this.crash(sp0 * 1.6); } }
+    // habitants à pied : adultes renversés (délit), mineurs jamais touchés (la voiture s'arrête net)
+    for (const w of this.walkersNear(c.pos.x, c.pos.z, 6)) {
+      const hit = circleVsBox(w.x, w.z, w.minor ? 1.1 : 0.35, c.pos.x, c.pos.z, c.heading, c.spec.L / 2, c.spec.W / 2); if (!hit) continue;
+      if (w.minor || Math.abs(c.speed) < 3) { c.pos.x -= hit.x; c.pos.z -= hit.z; c.speed = 0; continue; }
+      const sp0 = Math.abs(c.speed); this.knock(w.id, fx * Math.sign(c.speed) * Math.min(3, sp0 * 0.2), fz * Math.sign(c.speed) * Math.min(3, sp0 * 0.2), c.heading); c.speed *= 0.6; this.crash(sp0 * 0.6); this.crime(sp0 > 8 ? 30 : 15); this.hud.toast('Vous avez renversé un piéton !', 3);
+    }
+    // voitures des habitants (simulées) : solides pour la voiture du joueur
+    for (const d of this.npcCars) { if (Math.abs(d.x - c.pos.x) > 7 || Math.abs(d.z - c.pos.z) > 7) continue; const sp = SPECS[d.type]; let worst: { x: number; z: number; d: number } | null = null; for (const po of [-c.spec.L * 0.3, 0, c.spec.L * 0.3]) { const hit = circleVsBox(c.pos.x + fx * po, c.pos.z + fz * po, c.spec.W / 2, d.x, d.z, d.h, sp.L / 2, sp.W / 2); if (hit && (!worst || hit.d > worst.d)) worst = hit; } if (worst) { c.pos.x += worst.x; c.pos.z += worst.z; const rel = Math.abs(c.speed - d.speed); if (rel > 2.5) { this.crash(rel * 1.8); if (rel > 5) this.crime(4); } c.speed *= 0.55; } }
     // autres véhicules (garés ou en circulation)
     for (const v of this.vehicles.near(c.pos.x, c.pos.z, 9)) {
       const sp = SPECS[v.type]; const vx = Math.sin(v.h), vz = Math.cos(v.h); let worst = 0, nx = 0, nz = 0;
