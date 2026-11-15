@@ -5,6 +5,7 @@ export const ITEMS: Record<string, ItemDef> = {
   tablette: { nom: 'Tablette', kg: 0.6, val: 150 }, portable: { nom: 'Ordinateur portable', kg: 2.5, val: 340 }, console: { nom: 'Console de jeu', kg: 3, val: 190 },
   tele: { nom: 'Télévision', kg: 14, val: 280 }, ecran: { nom: 'Écran d\'ordinateur', kg: 5, val: 110 }, outillage: { nom: 'Caisse à outils', kg: 9, val: 160 },
   perceuse: { nom: 'Perceuse', kg: 2.2, val: 90 }, enceinte: { nom: 'Enceinte', kg: 1.5, val: 70 }, vin: { nom: 'Caisse de vin', kg: 8, val: 110 },
+  billets: { nom: 'Sac de billets', kg: 4, val: 1600 },
 };
 export type ItemId = keyof typeof ITEMS;
 /** Capacité du sac à dos (kg). Au-delà de 6 kg on ralentit. */
@@ -30,7 +31,7 @@ export const BULKY: Record<string, string> = { tv: 'tele', console: 'console', p
 
 /** Prix proposé par le receleur : environ un tiers de la valeur ; il paie moins si vous êtes recherché, et refuse au-delà de 2 étoiles. */
 export function fencePrice(items: string[], stars: number): number | null {
-  if (stars > 2) return null; const k = stars === 0 ? 0.36 : stars === 1 ? 0.3 : 0.22;
+  items = items.filter(i => i !== 'billets'); if (stars > 2) return null; const k = stars === 0 ? 0.36 : stars === 1 ? 0.3 : 0.22;
   return Math.round(valueOf(items) * k);
 }
 /** Résumé lisible d'une liste d'objets (« 2 × Bijoux, Télévision »). */

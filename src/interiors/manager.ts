@@ -90,8 +90,16 @@ export class InteriorManager {
     if (key === 'F') { g.player.punch(); g.sfx('crash', 0.25); if (c.state === 'dort' || armed || Math.random() < 0.45) { c.state = 'ko'; if (c.av) { c.av.root.rotation.set(-Math.PI / 2, c.av.root.rotation.y, 0, 'YXZ'); c.av.root.position.y = c.av.root.position.y > 0.3 ? 0.62 : 0.18; } g.hud.toast(`${c.npc.prenom} est assommé${she ? 'e' : ''}.`, 2.5); } else { g.uw.hurt(8); c.callT = Math.min(c.callT, 3); g.hud.toast(`${c.npc.prenom} se débat et vous frappe !`, 2); } g.crime(20, 8); return; }
     if (c.state === 'dort') { if (c.robbed) return; if (Math.random() < 0.7) { this.rob(); } else { c.state = 'eveille'; c.callT = 5; if (c.av) { c.av.root.rotation.set(0, 0, 0); c.av.root.position.y = 0; } g.hud.toast(`${c.npc.prenom} se réveille en sursaut !`, 3); } return; }
     if (c.state === 'soumis') { if (!c.robbed) this.rob(); return; }
-    if (armed) { c.state = 'soumis'; c.callT = 1e9; g.crime(40, 8); g.hud.toast(`${c.npc.prenom} lève les mains et vous tend ce que vous demandez.`, 3); this.rob(); }
+    if (armed) { c.state = 'soumis'; c.callT = 1e9; g.crime(40, 8); g.crimeFile('homejacking', 1); g.hud.toast(`${c.npc.prenom} lève les mains et vous tend ce que vous demandez.`, 3); this.rob(); }
     else { c.callT = Math.min(c.callT, 2); g.hud.toast(`${c.npc.prenom} refuse et crie au secours !`, 2.5); g.crime(15, 30); }
+  }
+  /** Hold-up : commerce ouvert, arme en main, à la caisse ou au guichet (jamais une école, jamais déjà braqué aujourd'hui). */
+  private holdupable(s: Spot) { return !this.forced && this.g.weapon !== 'poings' && (s.kind === 'acheter' || s.kind === 'coffre') && this.layout!.kind !== 'ecole' && !this.g.looted.has(`holdup:${this.bi}:${this.g.clock.day}`); }
+  private holdup(s: Spot) {
+    const g = this.g, bank = this.layout!.kind === 'banque'; g.looted.add(`holdup:${this.bi}:${g.clock.day}`); g.player.punch();
+    const m = bank ? rr(1800, 4200) : this.layout!.kind === 'supermarche' ? rr(300, 900) : rr(120, 450); g.money += m; g.sfx('alarm');
+    g.heat.value = Math.max(g.heat.value, bank ? 62 : 42); g.crimeFile('holdup', bank ? 1.3 : 1); g.report(-1 - this.bi, 4, 10, { outfit: g.hooded && g.heists.cagoule ? null : g.outfitId(), vehicle: null, face: !g.hooded });
+    g.hud.toast(`« La caisse, vite ! » — ${s.kind === 'coffre' ? 'le guichetier' : 'le personnel'} vous tend ${m} €. L'alarme silencieuse est déclenchée.`, 5); void s;
   }
   /** Argent du foyer + clés de voiture : le véhicule du foyer vous attend devant (home-jacking). */
   private rob() {
@@ -111,7 +119,8 @@ export class InteriorManager {
     this.occupantUpdate(dt); const op = this.occupantPrompt();
     if (op && !g.sleeping) { if (inp.hit('KeyE', 'action')) this.occupantAct('E'); else if (inp.hit('KeyF', 'hit')) this.occupantAct('F'); }
     else if (!g.sleeping && inp.hit('KeyE', 'action')) { const s = this.nearSpot(); if (s) this.act(s); }
-    const sp = this.nearSpot(); g.hud.prompt(g.sleeping ? 'R : se réveiller' : op ?? (sp ? `E : ${sp.label}` : ''));
+    else if (!g.sleeping && inp.hit('KeyF', 'hit')) { const s = this.nearSpot(); if (s && this.holdupable(s)) this.holdup(s); }
+    const sp = this.nearSpot(); g.hud.prompt(g.sleeping ? 'R : se réveiller' : op ?? (sp ? `E : ${sp.label}${this.holdupable(sp) ? ' · F : braquer la caisse' : ''}` : ''));
   }
   private nearSpot(): Spot | null {
     const p = this.g.player.pos; let best: Spot | null = null, bd = 1.7;

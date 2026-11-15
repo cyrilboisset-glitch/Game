@@ -44,7 +44,7 @@ export class Underworld {
   buildMarkers(scene: THREE.Scene) {
     const bagGeo = new THREE.BoxGeometry(0.5, 0.28, 0.32), bagMat = new THREE.MeshStandardMaterial({ color: 0x1d2320, roughness: 0.9 });
     this.caches.forEach((c, i) => { const m = new THREE.Mesh(bagGeo, bagMat); m.position.set(c.x, 0.14, c.z); m.rotation.y = i; m.castShadow = true; m.userData.i = i; m.visible = !this.g.looted.has('cache:' + i); scene.add(m); this.cacheMeshes.push(m); });
-    const roads = this.g.world.roads; const roadDist = (x: number, z: number) => { let m = 99; for (const r of roads) { const q = r.p[0]; if (Math.abs(q[0] - x) > 400 || Math.abs(q[1] - z) > 400) continue; for (let i = 0; i < r.p.length - 1; i++) { const [ax, az] = r.p[i], [bx, bz] = r.p[i + 1]; const dx = bx - ax, dz = bz - az, l2 = dx * dx + dz * dz || 1; const t = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / l2)); m = Math.min(m, Math.hypot(x - ax - dx * t, z - az - dz * t)); } } return m; };
+    const roadDist = this.roadDist;
     const hut = (d: Den, style: 'box' | 'cabanon', neon?: number) => { const s0 = siteFor(d.x, d.z, roadDist, (x, z) => this.g.coll.resolve({ x, z }, 3.2).depth > 0); const b = buildHut(scene, s0.x, s0.z, s0.h, style, neon); this.huts.push(b.box); d.x = b.door.x; d.z = b.door.z; };
     if (this.fence) hut(this.fence, 'box', 0x9a5cff); this.dens.forEach((d, i) => hut(d, i === 0 ? 'box' : 'cabanon'));
     this.tracer = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]), new THREE.LineBasicMaterial({ color: 0xffe9a0, transparent: true, opacity: 0.9 })); this.tracer.visible = false; this.tracer.frustumCulled = false; scene.add(this.tracer);
@@ -52,6 +52,7 @@ export class Underworld {
   huts: { x: number; z: number; h: number; hl: number; hw: number }[] = [];
   /** Collision avec les cabanes (piéton, voiture). */
   resolve(p: { x: number; z: number }, r: number) { let d = 0; for (const b of this.huts) { if (Math.abs(b.x - p.x) > 8 || Math.abs(b.z - p.z) > 8) continue; const k = circleVsBox(p.x, p.z, r, b.x, b.z, b.h, b.hl, b.hw); if (k) { p.x += k.x; p.z += k.z; d = Math.max(d, k.d); } } return d; }
+  roadDist = (x: number, z: number) => { let m = 99; for (const r of this.g.world.roads) { const q = r.p[0]; if (Math.abs(q[0] - x) > 400 || Math.abs(q[1] - z) > 400) continue; for (let i = 0; i < r.p.length - 1; i++) { const [ax, az] = r.p[i], [bx, bz] = r.p[i + 1]; const dx = bx - ax, dz = bz - az, l2 = dx * dx + dz * dz || 1; const t = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / l2)); m = Math.min(m, Math.hypot(x - ax - dx * t, z - az - dz * t)); } } return m; };
   residentsOf(bi: number) { return this.residents.get(bi) ?? []; }
   occ(bi: number): Occupancy | null { const l = this.residents.get(bi); if (!l) return null; const g = this.g; return occupancy(l, n => g.sim!.stateAt(n, g.clock.day, g.clock.hour, false)); }
   /** Texte de porte d'un logement : nom du foyer, indice visible, notes de repérage. */
@@ -86,14 +87,15 @@ export class Underworld {
     const g = this.g, P = g.player.pos, near = (d: Den) => Math.hypot(d.x - P.x, d.z - P.z) < 8;
     if (this.fence && near(this.fence)) {
       const h = g.clock.hour; if (h < 20 && h >= 6) return { title: 'Box fermé — le receleur reçoit de 20 h à 6 h', opts: [] };
-      const carNear = Math.hypot(g.car.pos.x - P.x, g.car.pos.z - P.z) < 15; const goods = carNear ? [...this.bag, ...this.trunk] : [...this.bag]; const price = fencePrice(goods, g.heat.stars);
+      const carNear = Math.hypot(g.car.pos.x - P.x, g.car.pos.z - P.z) < 15; const nb = (l: string[]) => l.filter(i => i !== 'billets'); const goods = carNear ? [...nb(this.bag), ...nb(this.trunk)] : nb(this.bag); const price = fencePrice(goods, g.heat.stars);
       const buy = (label: string, cost: number, fn: () => void): Opt => ({ label: `${label} — ${cost} €`, run: () => { if (g.money < cost) return g.hud.toast(`Il vous faut ${cost} €.`); g.money -= cost; fn(); g.sfx('coin'); } });
       const opts: Opt[] = [];
-      if (goods.length) opts.push({ label: price === null ? 'Vendre : « Trop chaud, reviens quand ça se sera calmé »' : `Vendre ${goods.length} objet${goods.length > 1 ? 's' : ''}${carNear && this.trunk.length ? ' (sac + coffre)' : ''} — ${price} €`, run: () => { if (price === null) return g.hud.toast('« Tu as la gendarmerie aux fesses. Dégage. »', 3); g.money += price; g.hud.toast(`Le receleur prend ${summary(goods)} : +${price} €.`, 4); this.bag = []; if (carNear) this.trunk = []; g.sfx('coin'); } });
+      if (goods.length) opts.push({ label: price === null ? 'Vendre : « Trop chaud, reviens quand ça se sera calmé »' : `Vendre ${goods.length} objet${goods.length > 1 ? 's' : ''}${carNear && this.trunk.length ? ' (sac + coffre)' : ''} — ${price} €`, run: () => { if (price === null) return g.hud.toast('« Tu as la gendarmerie aux fesses. Dégage. »', 3); g.money += price; g.hud.toast(`Le receleur prend ${summary(goods)} : +${price} €.`, 4); this.bag = this.bag.filter(i => i === 'billets'); if (carNear) this.trunk = this.trunk.filter(i => i === 'billets'); g.sfx('coin'); } });
       if (!this.tools.has('crochet')) opts.push(buy('Crochet de serrurier', 40, () => { this.tools.add('crochet'); g.hud.toast('Crochet acheté : les portes verrouillées s\'ouvrent sans bruit (E, sans bouger).', 4); }));
       opts.push(buy('Trousse de soins', 25, () => { this.kits++; }));
       opts.push(buy('12 balles', 60, () => { this.ammo += 12; }));
       if (!g.weapons.has('pistolet')) opts.push(buy('Pistolet', 450, () => { g.giveWeapon('pistolet'); this.ammo += 6; g.hud.toast('Pistolet en main (T pour changer). F : tirer.', 3); }));
+      opts.push(...g.heists.fenceOpts(buy));
       return { title: 'Receleur', opts };
     }
     for (let i = 0; i < this.dens.length; i++) { const d = this.dens[i]; if (!near(d)) continue;
@@ -103,6 +105,7 @@ export class Underworld {
       if (this.trunk.length && Math.hypot(g.car.pos.x - P.x, g.car.pos.z - P.z) < 15) opts.push({ label: `Vider le coffre (${this.trunk.length})`, run: () => { this.stash.push(...this.trunk); this.trunk = []; g.hud.toast('Coffre vidé dans la planque.'); } });
       if (this.stash.length) opts.push({ label: `Reprendre le butin (${this.stash.length} : ${summary(this.stash).slice(0, 40)})`, run: () => { const keep: string[] = []; for (const it of this.stash) if (!this.take(it)) keep.push(it); this.stash = keep; } });
       if (this.kits && (this.bleeding || g.needs.s.sante < 80)) opts.push({ label: 'Se soigner (trousse)', run: () => this.heal() });
+      opts.unshift(...g.kid.denOpts(), ...g.heists.denOpts(Math.hypot(g.car.pos.x - P.x, g.car.pos.z - P.z) < 15));
       return { title: d.nom, opts };
     }
     return null;

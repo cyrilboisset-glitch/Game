@@ -14,3 +14,4 @@
 - **Receleur, planques, caches** : lieux entièrement fictifs, placés sur des bouts de voie sans bâtiment à moins de 35 m et à plus de 250 m de toute école ; ce ne sont ni des commerces ni des habitations réels.
 - **Occupation des logements** : déduite de l'emploi du temps simulé des habitants fictifs du foyer ; les logements sans habitant simulé sont considérés vides.
 - **Tir** : cône de ±15° sur 32 m ; riposte de la gendarmerie à 3 étoiles et plus seulement si le joueur a le pistolet en main, probabilité de toucher 55 % moins 1 % par mètre.
+- **Vague 3** : cibles de braquage, lieux de remise de rançon et complices entièrement fictifs, placés sur des emplacements neutres loin des écoles. Durées (feu de voiture 70 s, de bâtiment 240 s, arrivée des pompiers 40 s), valeurs (sac de billets 1 600 €) et peines (gravité × 2 jours par dossier sous mandat) sont des valeurs de jeu, sans rapport avec le droit pénal réel.
