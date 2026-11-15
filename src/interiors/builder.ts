@@ -19,7 +19,8 @@ export function buildInterior(l: Layout): THREE.Scene {
   scene.add(new THREE.Mesh(cb.build()!, new THREE.MeshStandardMaterial({ color: 0xf4f1ea, emissive: 0xf4f1ea, emissiveIntensity: 0.55, roughness: 1, side: THREE.DoubleSide })));
   // murs + meubles : une couleur par boîte
   const mb = new MeshBuilder(); const panels = new MeshBuilder();
-  for (const b of l.boxes) mb.box(b.x, b.z, b.w, b.d, b.h, b.y, new THREE.Color(b.color));
+  const bulky = new Set(['tv', 'console', 'pc']);
+  for (const b of l.boxes) { if (b.tag && bulky.has(b.tag)) { const o = new THREE.Mesh(new THREE.BoxGeometry(b.w, b.h, b.d), new THREE.MeshStandardMaterial({ color: b.color, roughness: 0.4, metalness: 0.2 })); o.position.set(b.x, b.y + b.h / 2, b.z); o.userData.bulky = b.tag; scene.add(o); continue; } mb.box(b.x, b.z, b.w, b.d, b.h, b.y, new THREE.Color(b.color)); }
   for (const p of l.lights) panels.box(p.x, p.z, 1.2, 0.5, 0.04, l.H - 0.05, new THREE.Color(1, 1, 1));
   scene.add(new THREE.Mesh(mb.build()!, new THREE.MeshStandardMaterial({ map: plasterT.map, normalMap: plasterT.normalMap, vertexColors: true, roughness: 0.85 })));
   scene.add(new THREE.Mesh(panels.build()!, new THREE.MeshBasicMaterial({ color: 0xfff4d8 })));

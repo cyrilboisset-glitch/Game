@@ -6,7 +6,7 @@ import type { Road } from '../world/data';
 import { ROAD_W } from '../world/roads';
 import { rng } from '../interiors/generator';
 
-export interface WVehicle { id: number; type: VehicleType; paint: number; hp: number; x: number; z: number; h: number; speed: number; kind: 'gare' | 'trafic' | 'patrouille' | 'poursuite'; mine: boolean; upgrade: number; stun: number; }
+export interface WVehicle { id: number; type: VehicleType; paint: number; hp: number; x: number; z: number; h: number; speed: number; kind: 'gare' | 'trafic' | 'patrouille' | 'poursuite'; mine: boolean; upgrade: number; stun: number; trunk?: string[]; }
 
 /** Véhicules du monde : stationnés (garés le long des rues), circulation, patrouilles. Les rendus sont instanciés par type. */
 export class VehicleWorld {

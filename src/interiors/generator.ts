@@ -1,7 +1,7 @@
 // Générateur d'intérieurs procéduraux (logique pure, déterministe par graine). Ce ne sont PAS des reproductions réelles.
 export type Kind = 'logement' | 'supermarche' | 'commerce' | 'restaurant' | 'bar' | 'pharmacie' | 'banque' | 'coiffeur' | 'ecole' | 'bureau' | 'atelier';
 export interface Box { x: number; z: number; w: number; d: number; h: number; y: number; color: number; solid: boolean; tag?: string; }
-export interface Spot { id: string; kind: 'sortie' | 'acheter' | 'prendre' | 'manger' | 'boire' | 'fouiller' | 'dormir' | 'toilettes' | 'robinet' | 'coffre'; x: number; z: number; label: string; }
+export interface Spot { id: string; kind: 'sortie' | 'acheter' | 'prendre' | 'manger' | 'boire' | 'fouiller' | 'dormir' | 'toilettes' | 'robinet' | 'coffre' | 'emporter'; x: number; z: number; label: string; }
 export interface Layout { kind: Kind; W: number; D: number; H: number; boxes: Box[]; spots: Spot[]; door: { x: number; z: number }; spawn: { x: number; z: number }; lights: { x: number; z: number }[]; floor: 'bois' | 'carrelage' | 'beton'; wall: number; protected: boolean; }
 
 export function rng(seed: number) { let a = seed >>> 0; return () => { a = (a + 0x6d2b79f5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
@@ -52,17 +52,19 @@ export function generate(kind: Kind, wRaw: number, dRaw: number, seed: number): 
     case 'banque': floor = 'carrelage'; for (let x = 3; x < W - 2; x += 4) put(x, D / 2, 2.4, 0.7, 1.1, 0x5a6470, 'guichet'); put(W / 2, 0.8, 2.6, 1.2, 2.4, 0x3e4650, 'coffre'); spots.push({ id: 'coffre', kind: 'coffre', x: W / 2, z: 1.9, label: 'Forcer le coffre' }); break;
     case 'coiffeur': floor = 'carrelage'; for (let x = 2; x < W - 1.5; x += 2.2) { put(x, 0.5, 1.5, 0.15, 1.2, 0xbcd0dc, 'miroir'); put(x, 1.6, 0.7, 0.7, 0.55, 0x222222, 'fauteuil'); } put(W - 1.5, D - 2.6, 1.6, 0.7, 1.0, 0x9a6a44, 'caisse'); spots.push({ id: 'cois', kind: 'acheter', x: W - 1.5, z: D - 3.4, label: 'Prendre un soin (15 €)' }); break;
     case 'ecole': floor = 'carrelage'; for (let z = 3; z < D - 3; z += 2.2) for (let x = 2; x < W - 2; x += 2.4) { put(x, z, 1.1, 0.6, 0.75, 0xc9a66b, 'pupitre'); } put(W / 2, 0.5, 4, 0.2, 1.4, 0x2f4a3a, 'tableau'); break;   // école : décor neutre, aucune interaction
-    case 'bureau': floor = 'carrelage'; for (let x = 2; x < W - 2; x += 3.2) for (let z = 2; z < D - 4; z += 3) { put(x, z, 1.6, 0.8, 0.75, 0xb8956a, 'bureau'); put(x, z - 0.2, 0.5, 0.05, 0.4, 0x222222, 'ecran'); if (r() < 0.45) spots.push({ id: `t${spots.length}`, kind: 'fouiller', x, z: z + 0.9, label: 'Fouiller le tiroir' }); } break;
+    case 'bureau': floor = 'carrelage'; for (let x = 2; x < W - 2; x += 3.2) for (let z = 2; z < D - 4; z += 3) { put(x, z, 1.6, 0.8, 0.75, 0xb8956a, 'bureau'); const first = !spots.some(s => s.id === 'pc'); put(x, z - 0.2, 0.5, 0.05, 0.4, 0x222222, first ? 'pc' : 'ecran'); if (first) spots.push({ id: 'pc', kind: 'emporter', x: x + 0.7, z: z + 0.9, label: 'Emporter l\'écran (5 kg)' }); if (r() < 0.45) spots.push({ id: `t${spots.length}`, kind: 'fouiller', x, z: z + 0.9, label: 'Fouiller le tiroir' }); } break;
     case 'atelier': floor = 'beton'; for (let x = 2; x < W - 2; x += 3.4) { put(x, 1.0, 2.4, 0.9, 0.95, 0x6d7a86, 'etabli'); if (r() < 0.6) spots.push({ id: `a${spots.length}`, kind: 'fouiller', x, z: 2.0, label: 'Fouiller l\'établi' }); } for (let i = 0; i < 6; i++) put(2 + r() * (W - 4), 4 + r() * (D - 9), 1.1, 1.1, 1.0 + r() * 0.8, 0x9b7a4a, 'caisse'); break;
     default: {  // logement : séjour + cuisine + chambre + salle de bain
       floor = 'bois'; const wy = Math.round(W * 0.58);
       put(wy - 0.1, D * 0.35, 0.15, D * 0.7, H, wallColor, 'cloison'); put(wy - 0.1, D * 0.35 - 0, 0.15, 0.1, H, wallColor, 'cloison');
       put(3, 1.0, 3.2, 0.7, 0.9, 0xdadada, 'cuisine'); put(0.7, 3.0, 0.7, 0.7, 1.8, 0xf5f5f5, 'frigo'); spots.push({ id: 'frigo', kind: 'fouiller', x: 1.8, z: 3.1, label: 'Ouvrir le frigo' }); spots.push({ id: 'evier', kind: 'robinet', x: 3, z: 1.9, label: 'Boire au robinet' });
       put(wy / 2, D * 0.55, 2.2, 1.0, 0.8, 0x6b7a8f, 'canape'); put(wy / 2, D * 0.55 - 2, 1.6, 0.9, 0.5, 0x7a5a3a, 'table');
+      const tvOk = put(wy / 2, D * 0.55 - 3.3, 1.6, 0.45, 0.5, 0x5a3c22, 'meuble'); if (tvOk) { solid(wy / 2, D * 0.55 - 3.3, 1.25, 0.08, 0.72, 0x111316, 'tv', 0.5); spots.push({ id: 'tv', kind: 'emporter', x: wy / 2 - 0.3, z: D * 0.55 - 2.6, label: 'Emporter la télévision (14 kg)' }); }
       put(W - 2, 1.5, 1.9, 2.1, 0.6, 0xc9bda8, 'lit'); spots.push({ id: 'lit', kind: 'dormir', x: W - 3.4, z: 2.6, label: 'Se coucher dans le lit' });
       put(W - 0.8, D * 0.62, 0.5, 0.7, 0.45, 0xffffff, 'wc'); spots.push({ id: 'wc', kind: 'toilettes', x: W - 1.8, z: D * 0.62, label: 'Utiliser les toilettes' });
       put(W - 1.2, 3.8, 0.9, 1.4, 1.9, 0x8a6a4a, 'armoire'); spots.push({ id: 'arm', kind: 'fouiller', x: W - 2.2, z: 3.8, label: 'Fouiller l\'armoire' });
-      if (r() < 0.6) spots.push({ id: 'com', kind: 'fouiller', x: wy / 2 - 2, z: D * 0.55, label: 'Fouiller la commode' }); break;
+      if (r() < 0.6) spots.push({ id: 'com', kind: 'fouiller', x: wy / 2 - 2, z: D * 0.55, label: 'Fouiller la commode' });
+      if (tvOk && r() < 0.5) { solid(wy / 2 + 0.6, D * 0.55 - 3.3, 0.36, 0.26, 0.07, 0xe8e8e8, 'console', 0.5); spots.push({ id: 'console', kind: 'emporter', x: wy / 2 + 0.6, z: D * 0.55 - 2.6, label: 'Emporter la console (3 kg)' }); } break;
     }
   }
   return { kind, W, D, H, boxes, spots, door, spawn, lights, floor, wall: wallColor, protected: kind === 'ecole' };

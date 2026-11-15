@@ -38,6 +38,7 @@ export class AudioSys {
       case 'fail': this.tone(300, 0.5, 'sawtooth', 0.09, 0, 110); break;
       case 'arrest': [440, 370, 311, 262].forEach((f, i) => this.tone(f, 0.35, 'square', 0.08, i * 0.18)); break;
       case 'alarm': for (let i = 0; i < 6; i++) this.tone(i % 2 ? 1500 : 1100, 0.14, 'square', 0.07, i * 0.16); break;
+      case 'shot': this.burst(2400, 0.18, 0.6 * k + 0.1); this.tone(90, 0.16, 'sine', 0.35 * k, 0, 40); break;
       case 'ui': this.tone(660, 0.07, 'sine', 0.06); break;
     }
   }

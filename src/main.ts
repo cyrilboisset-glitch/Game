@@ -74,7 +74,9 @@ panel.onQuit = () => { game.stopObserving(); panel.show(false); }; panel.onSpeed
 const spotsOf = (types: string[]) => { const out: { x: number; z: number; nom: string }[] = []; for (const p of pois) { if (!types.includes(p.sous_type)) continue; const e = game.interior.index.entryOfPoi(p); if (e) out.push({ x: e.px + e.nx * 1.4, z: e.pz + e.nz * 1.4, nom: p.nom }); } return out; };
 const dead: { x: number; z: number }[] = []; const nodes: { x: number; z: number }[] = []; graph.pts.forEach((p, i) => { const d = graph.degree(i); if (d === 1) dead.push({ x: p[0], z: p[1] }); if (d >= 2 && i % 9 === 0) nodes.push({ x: p[0], z: p[1] }); });
 const schools = pois.filter(p => ['school', 'college', 'kindergarten'].includes(p.sous_type)).map(p => ({ x: p.x, z: p.y }));
-const neutres = neutralSpots(dead, (x, z) => game.coll.resolve({ x, z }, 35).depth > 0, schools);
+const neutres0 = neutralSpots(dead, (x, z) => game.coll.resolve({ x, z }, 35).depth > 0, schools);
+game.avatars = avatars; game.uw.setup(neutres0, graph.pts.filter((_, i) => i % 7 === 3 && graph.degree(i) >= 2).map(p => ({ x: p[0], z: p[1] })), schools, npcs); game.uw.buildMarkers(scene);
+const neutres = neutres0.filter(s => ![game.uw.fence, ...game.uw.dens].some(d => d && d.x === s.x && d.z === s.z));
 const mpanel = new MissionsPanel(); game.onOffers = () => mpanel.setOffers(game.offers, game.missions.rep, game.missions.active?.offer.titre ?? '');
 mpanel.onAccept = o => game.startOffer(o); mpanel.onAbandon = () => { game.missions.abandon(); game.boarded = null; game.onOffers(); }; game.onMissionsKey = () => mpanel.toggle();
 game.attachMissions({ commerces: spotsOf(['supermarket', 'bakery', 'butcher', 'greengrocer', 'pastry', 'variety_store', 'clothes', 'florist', 'books', 'convenience']), bureaux: spotsOf(['bank', 'estate_agent', 'employment_agency', 'insurance', 'lawyer', 'townhall', 'government', 'accountant', 'company']), neutres, nodes });
@@ -102,7 +104,7 @@ function updateStates(now: number, fx: number, fz: number) {
   for (const n of npcs) {
     let s = sim.stateAt(n, day, hour, false); const sel = game.observed?.id === n.id; const prev = game.states.get(n.id) ?? s;
     if (sel || Math.hypot(prev.x - fx, prev.z - fz) < 330 || Math.hypot(s.x - fx, s.z - fz) < 330) s = sim.stateAt(n, day, hour, true);
-    if (game.boarded === n.id) s = { ...s, kind: 'absent' as const }; game.states.set(n.id, s); statesArr.push(s);
+    if (game.boarded === n.id || game.uw.evacuated.has(n.id)) s = { ...s, kind: 'absent' as const }; game.states.set(n.id, s); statesArr.push(s);
   }
   statesMs = performance.now() - t0;
 }
@@ -151,7 +153,8 @@ function frame(now: number) {
   if (night > 0.2 && !car.lightsOn && !car.headlights[0].intensity) car.setLights(true); if (night <= 0.2 && car.lightsOn) car.setLights(false);
   if (night > 0.2) { const near = chunks.lamps.filter(l => Math.hypot(l.x - game.pos.x, l.z - game.pos.z) < 90).sort((p, q2) => p.distanceToSquared(game.pos) - q2.distanceToSquared(game.pos)); lampLights.forEach((l, i) => { const p = near[i]; l.intensity = p ? 140 : 0; if (p) l.position.set(p.x, 6.6, p.z); }); } else lampLights.forEach(l => (l.intensity = 0));
   { const ids = game.callers(); phones.forEach((sp, i) => { const id = ids[i]; const s0 = id !== undefined ? (game.npcCtl.get(id) ?? game.states.get(id)) : null; sp.visible = !!s0 && !game.interior.inside; if (s0) sp.position.set(s0.x, 2.4 + Math.sin(now * 0.008) * 0.08, s0.z); }); }
-  { const st: string[] = []; if (game.mode === 'foot') { if (game.crouch) st.push(game.hidden ? '🌿 Caché' : '🧎 Accroupi'); if (game.hooded) st.push('Capuche'); if (game.weapon !== 'poings') st.push(`🔨 ${({ bouteille: 'Bouteille', cle: 'Clé', barre: 'Barre', batte: 'Batte' } as Record<string, string>)[game.weapon]}`); }
+  { const st: string[] = []; if (game.mode === 'foot') { if (game.crouch) st.push(game.hidden ? '🌿 Caché' : '🧎 Accroupi'); if (game.hooded) st.push('Capuche'); if (game.weapon !== 'poings') st.push(game.weapon === 'pistolet' ? `🔫 ${game.uw.ammo} balle${game.uw.ammo > 1 ? 's' : ''}` : `🔨 ${({ bouteille: 'Bouteille', cle: 'Clé', barre: 'Barre', batte: 'Batte' } as Record<string, string>)[game.weapon]}`); }
+    const U = game.uw; if (U.bag.length) st.push(`🎒 ${U.carried.toFixed(1)} kg`); if (U.trunk.length) st.push(`Coffre : ${U.trunk.length}`); if (U.bleeding) st.push('🩸 Saigne'); if (U.kits) st.push(`🩹 ${U.kits}`); if (U.tools.has('crochet')) st.push('🗝 Crochet');
     const p = game.profile; const sig = [p.outfit, p.vehicle, p.face ? 'visage' : null].filter(Boolean).join(' · '); if (game.heat.value > 0 && sig) st.push(`Signalement : ${sig}`); if (game.reports.length) st.push(`📞 ${game.reports.length} témoin${game.reports.length > 1 ? 's' : ''}`); hud.status(st.join(' · ')); }
   grass.update(dt, fx, fz); if (mats.water.normalMap) { mats.water.normalMap.offset.x += dt * 0.012; mats.water.normalMap.offset.y += dt * 0.007; }
   if (now - lastShadow > 700) { lastShadow = now; chunks.setShadowRange(fx, fz, shadowRange); }
@@ -161,7 +164,7 @@ function frame(now: number) {
   settings.setStats(`FPS ${Math.round(quality.fps)} · niveau ${quality.level}${quality.auto ? ' (auto)' : ''}<br>appels ${renderer.info.render.calls} · triangles ${(renderer.info.render.triangles / 1000).toFixed(0)} k · chunks ${chunks.loaded.size}`);
   frames++; fpsT += dt; if (fpsT > 0.5) { fps = Math.round(frames / fpsT); frames = 0; fpsT = 0; }
   hud.update(game.needs, game.heat, game.money, game.inv, game.clock.label, game.clock.day);
-  const mt = game.missionTarget(); minimap.draw(game.pos.x, game.pos.z, game.mode === 'car' ? car.heading : player.heading, now, mt);
+  const mt = game.missionTarget(); minimap.draw(game.pos.x, game.pos.z, game.mode === 'car' ? car.heading : player.heading, now, mt, game.uw.markers());
   if (mt) { const d = Math.round(Math.hypot(mt.x - game.pos.x, mt.z - game.pos.z)); beacon.visible = true; beacon.position.set(mt.x, 0, mt.z); (beacon.children[0] as THREE.Mesh).scale.setScalar(1 + Math.sin(now * 0.004) * 0.08); const rem = game.missions.remaining(); hud.tracker(`🎯 ${mt.label}<br><span style="font-weight:400;opacity:.85">${d} m${rem !== null ? ' · ⏱ ' + Math.floor(rem / 60) + ':' + String(rem % 60).padStart(2, '0') : ''}</span>`); } else { beacon.visible = false; hud.tracker(null); }
   requestAnimationFrame(frame);
 }

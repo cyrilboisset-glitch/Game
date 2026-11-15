@@ -10,3 +10,7 @@
 - **Témoins (vague 1)** : portée de vue 35 m le jour, 18 m la nuit (×0,6 accroupi, ×0,3 caché), 6 témoins au plus par délit, délai d'appel de quelques secondes à ~30 s ; valeurs de jeu, non calibrées sur des données réelles.
 - **Reconnaissance** : coefficient 0,25 de base + tenue 0,45 + véhicule 0,5 + visage 0,2 (plafonné à 1), 0,6 sans signalement, 0,08 caché ; multiplie la portée à laquelle une patrouille vous repère (95 m).
 - **Bagarre** : ~40 % des adultes valides se défendent (choix déterministe par habitant) ; dégâts et délais d'assommage sont des valeurs de jeu.
+- **Butin (vague 2)** : poids et valeurs des objets volés sont des valeurs de jeu ; le receleur paie 36 % de la valeur à 0 étoile, 30 % à 1, 22 % à 2.
+- **Receleur, planques, caches** : lieux entièrement fictifs, placés sur des bouts de voie sans bâtiment à moins de 35 m et à plus de 250 m de toute école ; ce ne sont ni des commerces ni des habitations réels.
+- **Occupation des logements** : déduite de l'emploi du temps simulé des habitants fictifs du foyer ; les logements sans habitant simulé sont considérés vides.
+- **Tir** : cône de ±15° sur 32 m ; riposte de la gendarmerie à 3 étoiles et plus seulement si le joueur a le pistolet en main, probabilité de toucher 55 % moins 1 % par mètre.

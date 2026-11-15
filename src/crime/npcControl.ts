@@ -9,6 +9,8 @@ export class NpcControl {
   health(id: number) { return this.hp.get(id) ?? 100; }
   /** Met un habitant au sol pour `secs` secondes (KO, renversé). */
   ko(id: number, x: number, z: number, h: number, secs: number) { this.map.set(id, { id, mode: 'ko', x, z, h, until: this.t + secs, hp: 0, cd: 0, speed: 0, reported: false }); }
+  /** Panique (coup de feu) : l'habitant s'enfuit s'il n'est pas déjà pris en main. */
+  scare(id: number, x: number, z: number, h: number) { if (this.map.has(id)) return; this.map.set(id, { id, mode: 'fuite', x, z, h, until: this.t + 12, hp: this.health(id), cd: 0, speed: 0, reported: false }); }
   /** Coup porté : retourne le nouvel état. Personnalité (graine) : certains se défendent, la plupart fuient — tous fuient face à une arme. */
   hit(id: number, x: number, z: number, h: number, dmg: number, seed: number, armed: boolean): Mode {
     const hp = this.health(id) - dmg; this.hp.set(id, Math.max(0, hp));

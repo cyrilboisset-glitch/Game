@@ -1,11 +1,12 @@
 // Bagarre : armes contondantes, cible devant soi, attaque par surprise (assommer). Les mineurs ne sont jamais des cibles.
-export type WeaponId = 'poings' | 'bouteille' | 'cle' | 'barre' | 'batte';
+export type WeaponId = 'poings' | 'bouteille' | 'cle' | 'barre' | 'batte' | 'pistolet';
 export const WEAPONS: Record<WeaponId, { nom: string; dmg: [number, number]; range: number; cd: number; sneakKO: boolean; color: number; len: number }> = {
   poings: { nom: 'Poings', dmg: [12, 20], range: 1.45, cd: 0.45, sneakKO: false, color: 0, len: 0 },
   bouteille: { nom: 'Bouteille', dmg: [20, 30], range: 1.6, cd: 0.6, sneakKO: true, color: 0x2f6b3a, len: 0.3 },
   cle: { nom: 'Clé à molette', dmg: [26, 36], range: 1.6, cd: 0.6, sneakKO: true, color: 0x8a9096, len: 0.32 },
   barre: { nom: 'Barre de fer', dmg: [32, 44], range: 1.85, cd: 0.75, sneakKO: true, color: 0x5a5f66, len: 0.75 },
   batte: { nom: 'Batte', dmg: [36, 50], range: 1.9, cd: 0.8, sneakKO: true, color: 0x9a6a3a, len: 0.8 },
+  pistolet: { nom: 'Pistolet', dmg: [14, 22], range: 1.5, cd: 0.5, sneakKO: true, color: 0x1e1f22, len: 0.17 },   // corps à corps : coup de crosse ; le tir est géré par firearms.ts
 };
 export interface Target { id: number; x: number; z: number; h: number; minor: boolean; }
 /** Cible la plus proche dans un cône de ±60° devant le joueur, à portée de l'arme. */
