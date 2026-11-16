@@ -1,0 +1,16 @@
+<!doctype html><meta charset="utf-8"><body style="margin:0"><script type="module">
+// Labo : voiture intacte et voiture accidentée (avant gauche enfoncé, flanc, pare-brise fissuré, phare cassé), et voitures du trafic cabossées.
+import * as THREE from 'three';
+import { Car } from '/src/vehicles/car.ts';
+import { VehicleRenderer } from '/src/vehicles/world.ts';
+const r = new THREE.WebGLRenderer({ antialias: true }); r.setSize(1400, 600); r.toneMapping = THREE.ACESFilmicToneMapping; document.body.appendChild(r.domElement);
+const s = new THREE.Scene(); s.background = new THREE.Color(0xb7c6d2); s.add(new THREE.HemisphereLight(0xffffff, 0x667766, 1.4)); const d = new THREE.DirectionalLight(0xffffff, 2.4); d.position.set(4, 6, 5); s.add(d);
+const pm = new THREE.PMREMGenerator(r); s.environment = pm.fromScene(new (await import('three/examples/jsm/environments/RoomEnvironment.js')).RoomEnvironment(), 0.04).texture;
+s.add(new THREE.Mesh(new THREE.PlaneGeometry(60, 60).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0x55585c })));
+const cam = new THREE.PerspectiveCamera(30, 1400 / 600, 0.1, 100); cam.position.set(6.5, 3.2, 10); cam.lookAt(1.5, 0.6, 0);
+const a = new Car(); a.setVehicle('berline', 0x1f3f78, 95); a.root.position.set(-2.4, 0, 0); a.root.rotation.y = 0.5; s.add(a.root);
+const b = new Car(); b.setVehicle('berline', 0x1f3f78, 95); b.root.position.set(1.6, 0, 0); b.root.rotation.y = 0.5; s.add(b.root);
+b.impact(0.6, 2.35, 22); b.impact(-0.9, 0.4, 12); b.hp = 30; b.refreshPaint(); b.setLights(true);
+const vr = new VehicleRenderer(s, 20); vr.begin(); vr.add('citadine', 0x8a1c1c, 5.6, -1, -0.4, 1, 0.5, 'avant'); vr.add('break', 0xe8e8e8, 9, -2.5, 0.9, 1, 0.5, 'arriere'); vr.end();
+function frame() { r.render(s, cam); requestAnimationFrame(frame); } frame(); window.__ready = true;
+</script>

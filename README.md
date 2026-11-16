@@ -130,3 +130,17 @@ Scénario de vérification : `node tools/collisions.cjs <dossier>`. Limite : les
 - Le **menu ☰** regroupe le reste : manger, boire, soin, dormir, besoin, capuche, objet, feu, missions, dossiers, phares, klaxon.
 - Vibration légère à chaque appui ; en paysage, le pavé est réduit.
 - Captures de contrôle : `node tools/touch.cjs <dossier>`.
+
+## Animations et chocs
+- **Personnages** :
+  - quand ils sont renversés par une voiture, les habitants sont projetés et tombent en un demi-seconde ; assommés, ils s'écroulent de la même façon ;
+  - ils se relèvent (0,7 s) avant de s'enfuir, ont un sursaut de recul quand on les frappe et arment leurs coups en bagarre ;
+  - ton personnage est visible au volant, assis, les mains sur le volant, et suit le roulis de la voiture.
+- **Voiture du joueur** :
+  - la tôle s'enfonce à l'endroit exact du choc (avant, arrière, flanc), plus fort à hauteur de pare-chocs ;
+  - le pare-brise se fissure au-delà d'un gros choc, et le phare du côté touché se casse et n'éclaire plus ;
+  - des étincelles jaillissent au point de contact, et en continu quand on frotte un mur au-dessus de 20 km/h ;
+  - tout est réparé au garage.
+- **Voitures du trafic et garées** : une fois percutées, elles apparaissent cabossées du côté touché (avant, arrière ou flanc).
+- **Caméra en voiture** : glisser le doigt (ou la souris) fait tourner la caméra autour du véhicule ; elle revient derrière quand on roule.
+- Vérification : `node tools/crash.cjs <dossier>` et le labo `tools/lab/crash.html`.
