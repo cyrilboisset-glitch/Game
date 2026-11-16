@@ -47,7 +47,7 @@ export class Game {
   mode: Mode = 'foot'; sleeping = false; money = 40; inv = { nourriture: 1, eau: 1 }; looted = new Set<string>();
   needs = new Needs(); heat = new Heat(); clock: Clock; coll: Collision;
   vehicles!: VehicleWorld; traffic!: Traffic; smoke?: Smoke; tireSmoke?: Smoke; fx?: Effects; police?: Police; missions = new Missions(); offers: Offer[] = []; private mbase?: Omit<GenCtx, 'day' | 'rep' | 'at' | 'seed'>; private offerDay = -1; boarded: number | null = null; props?: PropColliders; npcCars: { x: number; z: number; h: number; speed: number; type: VehicleType }[] = []; npcCtl = new NpcControl(); reports: { witness: number; due: number; v: number; desc: Profile }[] = []; profile: Profile = { outfit: null, vehicle: null, face: false };
-  private wasCar = false; uw = new Underworld(this); arson = new Arson(this); heists = new Heists(this); kid = new Kidnapping(this); enquete = new Enquete(); prisonDays = 0; avatars?: AvatarFactory; private schools: { x: number; z: number }[] = [];
+  private wasCar = false; carOff = 0; private lookT = 9; uw = new Underworld(this); arson = new Arson(this); heists = new Heists(this); kid = new Kidnapping(this); enquete = new Enquete(); prisonDays = 0; avatars?: AvatarFactory; private schools: { x: number; z: number }[] = [];
   crouch = false; hidden = false; night = false; weapons = new Set<WeaponId>(['poings']); weapon: WeaponId = 'poings'; private attackCd = 0; downT = 0; private t = 0; vis = 1; dealerSel = 0; onMissionsKey: () => void = () => {}; sfx: (n: string, v?: number) => void = () => {}; onOffers: () => void = () => {}; private ramT = 0; private speedMsg = 0; interior!: InteriorManager; observed: Npc | null = null; npcs = new Map<number, Npc>(); sim?: NpcSim; states = new Map<number, NpcState>(); talkCount = 0; camYaw = 0; camPitch = 0.28; private saveT = 0; private ctl: Controls = { throttle: 0, brake: 0, steer: 0, handbrake: false };
   constructor(public world: WorldData, public pois: Poi[], public car: Car, public player: Player, public input: Input, public hud: Hud, startHour: number, private start: { x: number; z: number; h: number }, scene: THREE.Scene) {
     this.clock = new Clock(startHour); this.coll = new Collision(world.builds); this.respawn(false);
@@ -236,6 +236,8 @@ export class Game {
     dt = Math.max(0, dt);
     const inp = this.input; inp.poll(); const [lx, ly] = inp.takeLook();
     this.camYaw -= lx * 0.0055; this.camPitch = THREE.MathUtils.clamp(this.camPitch + ly * 0.004, -0.15, 1.1);
+    // voiture : on peut tourner la caméra autour du véhicule ; elle revient derrière quand on roule
+    if (this.mode === 'car') { if (lx) { this.carOff -= lx * 0.0055; this.lookT = 0; } else this.lookT += dt; if (this.lookT > 1.5 && Math.abs(this.car.speed) > 2) this.carOff *= 1 - Math.min(1, dt * 2.5); this.carOff = Math.atan2(Math.sin(this.carOff), Math.cos(this.carOff)); }
     if (this.observed) {   // mode observation : le joueur est spectateur (besoins figés), le temps peut être accéléré
       if (inp.hit('Escape', 'quit')) this.stopObserving(); this.clock.tick(dt); this.hud.veil(0); this.hud.tick(dt); this.hud.prompt('Échap : quitter l\'observation'); return;
     }

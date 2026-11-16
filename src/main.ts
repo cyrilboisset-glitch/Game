@@ -124,8 +124,8 @@ function placeCamera(dt: number) {
   if (q.has('aerial')) { camera.position.set(game.pos.x - 120, 170, game.pos.z + 170); camera.lookAt(game.pos.x + 40, 0, game.pos.z - 20); return; }
   let tp: THREE.Vector3, look: THREE.Vector3;
   if (game.mode === 'car') {
-    const fx = Math.sin(car.heading), fz = Math.cos(car.heading), back = 7.2 + Math.abs(car.speed) * 0.08;
-    tp = new THREE.Vector3(car.pos.x - fx * back, 2.9 + game.camPitch * 3 - 0.8, car.pos.z - fz * back); look = new THREE.Vector3(car.pos.x + fx * 6, 1.3, car.pos.z + fz * 6);
+    const yaw = car.heading + game.carOff; const fx = Math.sin(yaw), fz = Math.cos(yaw), back = 7.2 + Math.abs(car.speed) * 0.08;
+    tp = new THREE.Vector3(car.pos.x - fx * back, 2.9 + game.camPitch * 3 - 0.8, car.pos.z - fz * back); look = new THREE.Vector3(car.pos.x + fx * (Math.abs(game.carOff) > 0.3 ? 0.5 : 6), 1.1, car.pos.z + fz * (Math.abs(game.carOff) > 0.3 ? 0.5 : 6));
   } else {
     const d = 3.6, y = game.camYaw, p = game.camPitch; const cx = Math.sin(y) * Math.cos(p), cz = Math.cos(y) * Math.cos(p);
     look = new THREE.Vector3(player.pos.x, 1.5, player.pos.z); tp = new THREE.Vector3(player.pos.x - cx * d, 1.5 + Math.sin(p) * d, player.pos.z - cz * d);

@@ -13,14 +13,14 @@ const shot = async (p, name) => { await ev(p, 'window.__game.sync()'); await ste
   await ev(p, `(()=>{const W=G.world.builds;for(let k=50;k<W.length;k+=37){const P=W[k].p;const mx=(P[0][0]+P[1][0])/2,mz=(P[0][1]+P[1][1])/2;const e=G.interior.index.find(mx,mz,0.5);if(!e)continue;const x=e.px+e.nx*9,z=e.pz+e.nz*9;if(G.coll.resolve({x,z},2.5).depth>0)continue;G.car.pos.set(x,0,z);G.car.heading=Math.atan2(-e.nx,-e.nz);G.car.speed=14;G.camYaw=G.car.heading;window.__w=e;return}})()`);
   const g0 = await ev(p, geo); for (let i = 0; i < 40; i++) await step(p, 1);
   console.log('1. mur à 50 km/h → état', Math.round(await ev(p, 'G.car.hp')), '/ 95 | tôle déformée :', g0 !== await ev(p, geo), '| pare-brise fissuré :', await ev(p, 'G.car.cracked'), '| phares cassés :', await ev(p, 'JSON.stringify([...G.car.broken])'));
-  await ev(p, `(()=>{const c=G.car;c.speed=0;const h=c.heading;G.camYaw=h+Math.PI*0.85;G.camPitch=0.25;G.car.setLights(true);})()`); await step(p, 2); await shot(p, 'choc-mur.png');
+  await ev(p, `(()=>{const c=G.car;c.speed=0;G.carOff=Math.PI*0.82;G.camPitch=0.1;G.car.setLights(true);})()`); await step(p, 2); await shot(p, 'choc-mur.png');
   // 2. contre une voiture garée
   await ev(p, `(()=>{const v=G.vehicles.list.find(v=>v.kind==='gare'&&!v.mine&&!G.vehicles.near(v.x,v.z,9).some(w=>w!==v));window.__v=v;const fx=Math.sin(v.h),fz=Math.cos(v.h);G.car.repair();G.car.pos.set(v.x-fx*12,0,v.z-fz*12);G.car.heading=v.h;G.car.speed=13;})()`);
   for (let i = 0; i < 45; i++) await step(p, 1);
   console.log("2. voiture garée percutée par l'arrière → son état", (await ev(p, 'window.__v.hp/ ({citadine:60,break:75,berline:95,utilitaire:110,depart:70}[window.__v.type]||80)')).toFixed(2), '| côté abîmé :', await ev(p, 'window.__v.dent'));
-  await ev(p, `(()=>{const v=window.__v;G.car.pos.set(v.x-Math.sin(v.h)*14+Math.cos(v.h)*5,0,v.z-Math.cos(v.h)*14-Math.sin(v.h)*5);G.camYaw=Math.atan2(v.x-G.car.pos.x,v.z-G.car.pos.z);G.camPitch=0.2;})()`); await step(p, 2); await shot(p, 'choc-voiture-garee.png');
+  await ev(p, `(()=>{const v=window.__v;G.car.pos.set(v.x-Math.sin(v.h)*14+Math.cos(v.h)*5,0,v.z-Math.cos(v.h)*14-Math.sin(v.h)*5);G.car.heading=Math.atan2(v.x-G.car.pos.x,v.z-G.car.pos.z);G.carOff=0;G.camPitch=0.2;})()`); await step(p, 2); await shot(p, 'choc-voiture-garee.png');
   // 3. conducteur au volant
-  await ev(p, `(()=>{G.car.repair();G.camYaw=G.car.heading+Math.PI*0.62;G.camPitch=0.12;})()`); await step(p, 3); console.log('3. au volant : pose', await ev(p, `JSON.stringify([...G.player['av'].poseW].filter(([k,v])=>v>0.5).map(([k])=>k))`), '| visible', await ev(p, 'G.player.root.visible')); await shot(p, 'conducteur.png');
+  await ev(p, `(()=>{G.car.repair();G.carOff=Math.PI*0.55;G.camPitch=0.05;})()`); await step(p, 3); console.log('3. au volant : pose', await ev(p, `JSON.stringify([...G.player['av'].poseW].filter(([k,v])=>v>0.5).map(([k])=>k))`), '| visible', await ev(p, 'G.player.root.visible')); await shot(p, 'conducteur.png');
   // 4. piéton renversé : chute puis relevé
   await ev(p, `(()=>{G.clock.hour=8.3;const W=[];for(const n of G.npcs.values()){if(n.minor)continue;const s=G.sim.stateAt(n,G.clock.day,8.3,true);if(s.kind==='marche')W.push(s)}const s=W[5];G.states.set(s.id,s);window.__p=s;G.knock(s.id,Math.sin(G.car.heading)*2,Math.cos(G.car.heading)*2,G.car.heading);})()`);
   const fall = []; for (let i = 0; i < 4; i++) { fall.push((await ev(p, `G.overrides().get(window.__p.id).fall`)).toFixed(2)); await step(p, 4); }
