@@ -30,6 +30,8 @@ import { Debris } from './vehicles/wreck';
 import { Radio } from './audio/radio';
 import { Phone } from './ui/phone';
 import { WeatherFx } from './world/weather';
+import { Fullscreen } from './ui/fullscreen';
+import { startTips } from './ui/tips';
 import * as Save from './core/save';
 import { RoadGraph } from './roads/graph';
 import { buildPopulation, loadAddresses } from './npc/population';
@@ -92,7 +94,8 @@ const beacon = new THREE.Group(); { const m = new THREE.MeshBasicMaterial({ colo
 // audio, qualité, réglages
 const grass = new GrassField(scene, chunks.mask!);
 const phoneTex = (() => { const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d')!; g.fillStyle = 'rgba(200,30,30,0.92)'; g.beginPath(); g.arc(32, 32, 28, 0, 7); g.fill(); g.font = '34px system-ui'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('📞', 32, 35); return new THREE.CanvasTexture(c); })();
-const phones: THREE.Sprite[] = []; for (let i = 0; i < 6; i++) { const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: phoneTex, depthTest: false, transparent: true, sizeAttenuation: false })); sp.scale.setScalar(0.045); sp.visible = false; sp.renderOrder = 10; scene.add(sp); phones.push(sp); } const audio = new AudioSys(); let lastBellH = -1; const churches = pois.filter(p => p.sous_type === 'place_of_worship'); const radio = new Radio(() => audio.radioOut()); game.onRadio = () => hud.toast(radio.cycle(), 2.5); const settings = new Settings(); const touchDev = matchMedia('(pointer: coarse)').matches;
+const phones: THREE.Sprite[] = []; for (let i = 0; i < 6; i++) { const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: phoneTex, depthTest: false, transparent: true, sizeAttenuation: false })); sp.scale.setScalar(0.045); sp.visible = false; sp.renderOrder = 10; scene.add(sp); phones.push(sp); } const fullscreen = new Fullscreen(input.touch); input.onUi = (k: string) => { if (k === 'fullscreen') fullscreen.toggle(); };
+const audio = new AudioSys(); (window as any).__audio = audio; let lastBellH = -1; const churches = pois.filter(p => p.sous_type === 'place_of_worship'); const radio = new Radio(() => audio.radioOut()); game.onRadio = () => hud.toast(radio.cycle(), 2.5); const settings = new Settings(); const touchDev = matchMedia('(pointer: coarse)').matches;
 const quality = new AutoQuality(touchDev ? 'moyen' : 'eleve'); game.sfx = (n, v) => audio.sfx(n, v);
 function applyQuality(l: Level) {
   const p = levelParams(l); renderer.setPixelRatio(p.pixelRatio); renderer.setSize(innerWidth, innerHeight); post.setLevel(l === 'bas' ? 'aucun' : l === 'moyen' ? 'moyen' : 'eleve'); post.setSize(innerWidth, innerHeight);
@@ -146,7 +149,7 @@ let lastShadow = 0; let acc = 0, last = performance.now(), frames = 0, fpsT = 0,
 chunks.update(game.pos.x, game.pos.z, VIEW); placeCamera(0);
 document.getElementById('loading')?.remove();
 // hors ligne : enregistre le service worker (uniquement en HTTPS, donc pas en développement local)
-if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) navigator.serviceWorker.register('./sw.js').then(reg => { const done = () => { if (!localStorage.getItem('pontcharra-offline')) { try { localStorage.setItem('pontcharra-offline', '1'); } catch { /* ignoré */ } hud.toast('Jeu enregistré sur l\'appareil : il fonctionne maintenant sans internet.', 5); } }; if (reg.active) done(); else reg.addEventListener('updatefound', () => reg.installing?.addEventListener('statechange', e => { if ((e.target as ServiceWorker).state === 'activated') done(); })); }).catch(() => { /* hors ligne indisponible */ }); (window as any).__ready = true;
+if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) navigator.serviceWorker.register('./sw.js').then(reg => { const done = () => { if (!localStorage.getItem('pontcharra-offline')) { try { localStorage.setItem('pontcharra-offline', '1'); } catch { /* ignoré */ } hud.toast('Jeu enregistré sur l\'appareil : il fonctionne maintenant sans internet.', 5); } }; if (reg.active) done(); else reg.addEventListener('updatefound', () => reg.installing?.addEventListener('statechange', e => { if ((e.target as ServiceWorker).state === 'activated') done(); })); }).catch(() => { /* hors ligne indisponible */ }); if (!q.has('freeze')) startTips(hud, input.touch); (window as any).__ready = true;
 (window as any).__game = { setQuality: (l: Level) => { quality.auto = false; quality.set(l); applyQuality(l); }, police, traffic, vworld, npcRender, npcStats: () => ({ ...npcRender.stats(), vehicules: vrender.count(), circulation: traffic.cars.length, garees: vworld.list.filter(v => v.kind === 'gare').length, habitants: npcs.length, majEtatsMs: +statesMs.toFixed(1) }), sync: () => { chunks.update(game.pos.x, game.pos.z, VIEW); signs.update(game.pos.x, game.pos.z); snap = true; placeCamera(0); }, game, car, player, camera, renderer, stats: () => ({ fps, calls: renderer.info.render.calls, tris: renderer.info.render.triangles, chunks: chunks.loaded.size }) };
 
 function frame(now: number) {
@@ -175,7 +178,7 @@ function frame(now: number) {
   if (now - lastShadow > 700) { lastShadow = now; chunks.setShadowRange(fx, fz, shadowRange); }
   renderer.info.autoReset = false; renderer.info.reset();
   post.render(game.interior.inside ? game.interior.scene! : scene, camera, dt, game.interior.inside ? 0 : night, game.interior.inside ? 0 : sunset);
-  audio.update(dt, { inCar: game.mode === 'car' && !game.interior.inside, speed: car.speed, throttle: Math.max(0, input.y), slip: car.slip, dead: car.dead, footSpeed: player.speed, inside: game.interior.inside, night: night > 0.4, policeDist: police.nearest, alert: game.heat.stars > 0, horn: input.horn , rain: weather.wx.rain + weather.wx.snow * 0.2, traffic: traffic.cars.filter(c => Math.abs(c.v.x - game.pos.x) < 90 && Math.abs(c.v.z - game.pos.z) < 90).length });
+  audio.update(dt, { inCar: game.mode === 'car' && !game.interior.inside, speed: car.speed, throttle: Math.max(0, input.y), slip: car.slip, dead: car.dead, footSpeed: player.speed, inside: game.interior.inside, night: night > 0.4, policeDist: police.nearest, alert: game.heat.stars > 0, horn: input.horn , rain: weather.wx.rain + weather.wx.snow * 0.2, traffic: traffic.cars.filter(c => Math.abs(c.v.x - game.pos.x) < 90 && Math.abs(c.v.z - game.pos.z) < 90).length , surface: game.interior.inside ? 'bois' : chunks.mask && chunks.mask.get(player.pos.x, player.pos.z) === 1 ? 'beton' : 'herbe', fire: Math.max(0, ...game.arson.sim.active.map(n => n.power * Math.max(0, 1 - Math.hypot(n.x - game.pos.x, n.z - game.pos.z) / 45)), 0) });
   settings.setStats(`FPS ${Math.round(quality.fps)} · niveau ${quality.level}${quality.auto ? ' (auto)' : ''}<br>appels ${renderer.info.render.calls} · triangles ${(renderer.info.render.triangles / 1000).toFixed(0)} k · chunks ${chunks.loaded.size}`);
   frames++; fpsT += dt; if (fpsT > 0.5) { fps = Math.round(frames / fpsT); frames = 0; fpsT = 0; }
   hud.update(game.needs, game.heat, game.money, game.inv, `${game.clock.label} · ${weather.label()}`, game.clock.day);

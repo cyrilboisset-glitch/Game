@@ -54,10 +54,10 @@ export class InteriorManager {
     const poi = this.index.poi(e.bi); const o = this.g.uw.occ(e.bi); if (o && o.minors.length) { this.g.hud.toast('Des enfants sont à la maison : vous renoncez.', 3); return; }
     this.forced = true; this.noisy = false; this.poi = poi; this.g.crime(12, 3);
     const hk = this.homeKey(e.bi, poi); const alarmed = !!hk && this.g.memory.alarmed(hk, this.g.clock.day); if (hk) this.g.memory.burgled(hk, this.g.clock.day);
-    if (Math.random() < (alarmed ? 0.6 : poi ? 0.2 : 0.06) * alarmK(this.g.skills.level('crochetage'))) { this.g.crime(20, 70); this.g.sfx('alarm'); this.g.hud.toast('La serrure cède… mais une ALARME se déclenche !'); } else { this.g.sfx('door'); this.g.hud.toast('La serrure cède sans bruit.'); }
+    if (Math.random() < (alarmed ? 0.6 : poi ? 0.2 : 0.06) * alarmK(this.g.skills.level('crochetage'))) { this.g.crime(20, 70); this.g.sfx('alarm'); this.g.hud.toast('La serrure cède… mais une ALARME se déclenche !'); } else { this.g.sfx('unlock'); this.g.hud.toast('La serrure cède sans bruit.'); }
     this.transition(() => this.enter(e));
   }
-  private transition(fn: () => void) { this.fade = { t: 0.5, fn }; this.g.hud.veil(1); }
+  private transition(fn: () => void) { this.fade = { t: 0.5, fn }; this.g.hud.veil(1); this.g.sfx('door'); }
   private enter(e: Entry) {
     this.entry = e; this.bi = e.bi; this.apt = !this.poi && this.g.uw.units(e.bi) > 1 ? this.g.uw.aptNo(e.bi) : -1; const ck = e.bi * 1000 + this.apt + 1; let c = this.cache.get(ck);
     if (!c) { const d = this.index.dims(e.bi); const flat = this.apt >= 0; const kind = flat ? 'logement' : kindFor(this.poi?.sous_type, d.area, rng(e.bi * 7919 + 13)); const layout = flat ? generate(kind, 10 + (this.apt % 3), 8.5 + (this.apt % 2), e.bi * 7919 + 1 + this.apt * 31) : generate(kind, d.w * 0.95, d.d * 0.95, e.bi * 7919 + 1); c = { layout, scene: buildInterior(layout) }; this.cache.set(ck, c); if (this.cache.size > 6) { const k = this.cache.keys().next().value!; this.cache.delete(k); } }
@@ -122,6 +122,8 @@ export class InteriorManager {
     const g = this.g, l = this.layout!, p = g.player, inp = g.input;
     if (!this.fade) { p.update(dt, inp.x, inp.y, g.camYaw, inp.run, g.needs.speedFactor * 0.9 * g.uw.speedFactor); collide(l, p.pos, p.radius); if (this.occ) { const c = this.occ, dx = p.pos.x - c.x, dz = p.pos.z - c.z, d = Math.hypot(dx, dz); if (c.state !== 'dort' && d < 0.6 && d > 1e-4) { p.pos.x = c.x + dx / d * 0.6; p.pos.z = c.z + dz / d * 0.6; } } } else p.update(dt, 0, 0, g.camYaw, false, 1);
     p.root.position.copy(p.pos);
+    // sortir : en franchissant la porte, ou avec le bouton « Sortir » (Échap) depuis n'importe où dans la pièce
+    if (!this.fade && !g.sleeping && (inp.hit('Escape', 'exit') || (p.pos.z > l.D + 0.35 && Math.abs(p.pos.x - l.door.x) < 1.2))) { this.exit(); return; }
     this.occupantUpdate(dt); const op = this.occupantPrompt();
     if (op && !g.sleeping) { if (inp.hit('KeyE', 'action')) this.occupantAct('E'); else if (inp.hit('KeyF', 'hit')) this.occupantAct('F'); }
     else if (!g.sleeping && inp.hit('KeyE', 'action')) { const s = this.nearSpot(); if (s) this.act(s); }
@@ -129,7 +131,7 @@ export class InteriorManager {
     const sp = this.nearSpot(); g.hud.prompt(g.sleeping ? 'R : se réveiller' : op ?? (sp ? `E : ${sp.label}${this.holdupable(sp) ? ' · F : braquer la caisse' : ''}` : ''));
   }
   private nearSpot(): Spot | null {
-    const p = this.g.player.pos; let best: Spot | null = null, bd = 1.7;
+    const p = this.g.player.pos; let best: Spot | null = null, bd = this.g.input.touch ? 2.4 : 1.7;
     for (const s of this.layout!.spots) { if (s.kind !== 'sortie' && this.used(s)) continue; const d = Math.hypot(s.x - p.x, s.z - p.z); if (d < bd) { bd = d; best = s; } }
     return best;
   }
@@ -144,7 +146,7 @@ export class InteriorManager {
     return { pos: new THREE.Vector3(t.x, ty, t.z), look: new THREE.Vector3(g.player.pos.x, 1.2, g.player.pos.z) };
   }
   private act(s: Spot) {
-    const sfxOk = () => this.g.sfx('ui');
+    const sfxOk = () => this.g.sfx('loot');
     const g = this.g, l = this.layout!, hud = g.hud, open = !this.forced, key = this.key(s);
     const once = () => { g.looted.add(key); };
     switch (s.kind) {
@@ -170,7 +172,7 @@ export class InteriorManager {
       case 'emporter': { const it = BULKY[s.id]; if (!it || !g.uw.take(it)) return; once(); this.refresh(); g.sfx('door'); hud.toast(`Vous embarquez : ${ITEMS[it].nom.toLowerCase()} (sac ${g.uw.carried.toFixed(1)} kg${g.uw.carried > 6 ? ', vous êtes ralenti' : ''}).`, 3); break; }
       case 'coffre': g.sfx('alarm'); if (g.looted.has(key)) return; once(); { const m = rr(250, 700); g.money += m; g.crime(60); if (Math.random() < 0.6) g.crime(30); hud.toast(`Coffre forcé : +${m} € — la gendarmerie sera prévenue.`); } break;
       case 'dormir': g.sleeping = true; hud.toast('Vous vous couchez… (R pour vous réveiller)'); break;
-      case 'toilettes': g.needs.relieve(); hud.toast('Soulagé, en toute discrétion.'); break;
+      case 'toilettes': g.needs.relieve(); g.sfx('flush'); hud.toast('Soulagé, en toute discrétion.'); break;
       case 'robinet': g.needs.drink(30); hud.toast('Vous buvez au robinet.'); break;
     }
   }

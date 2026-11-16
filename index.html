@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover"><meta name="mobile-web-app-capable" content="yes"><meta name="theme-color" content="#10151c">
 <title>Pontcharra</title>
 <link rel="manifest" href="./manifest.webmanifest"><meta name="theme-color" content="#10151c"><link rel="icon" href="./icons/icon-192.png"><link rel="apple-touch-icon" href="./icons/icon-192.png"><meta name="mobile-web-app-capable" content="yes">
 <style>
-html,body{margin:0;height:100%;background:#000;overflow:hidden;font-family:system-ui,sans-serif;touch-action:none}
+html,body{margin:0;height:100%;height:100dvh;overscroll-behavior:none;-webkit-user-select:none;user-select:none;background:#000;overflow:hidden;font-family:system-ui,sans-serif;touch-action:none}
 canvas{display:block}
 #hud{position:fixed;inset:0;pointer-events:none;color:#fff;text-shadow:0 1px 3px #000a}
 .pill{position:absolute;background:rgba(10,14,20,.55);backdrop-filter:blur(6px);padding:6px 12px;border-radius:10px;font-weight:600;font-size:14px}
@@ -13,7 +13,7 @@ canvas{display:block}
 #veil{position:fixed;inset:0;background:#000;opacity:0;transition:opacity .6s;pointer-events:none}
 #alert{position:fixed;inset:0;pointer-events:none;opacity:0;transition:opacity .4s;box-shadow:inset 0 0 90px 10px rgba(220,30,30,.0)}#alert.on{opacity:1;animation:siren 1s infinite}#alert.on.seen{animation-duration:.5s}@keyframes siren{0%,100%{box-shadow:inset 0 0 120px 14px rgba(230,30,40,.45)}50%{box-shadow:inset 0 0 120px 14px rgba(40,90,255,.5)}}
 #prompt{background:rgba(10,14,20,.7)}.ui{position:fixed;touch-action:none;user-select:none;z-index:5}
-#joy{left:24px;bottom:34px;width:130px;height:130px;border-radius:50%;background:#fff2;border:2px solid #fff5;position:fixed}#knob{position:absolute;left:41px;top:41px;width:48px;height:48px;border-radius:50%;background:#fffa}
+#joy{left:24px;bottom:34px;width:130px;height:130px;border-radius:50%;background:#fff1;border:2px solid #fff4;position:fixed;opacity:.55;transition:opacity .15s}#joy.on{opacity:1;background:#fff2}#knob{position:absolute;left:41px;top:41px;width:48px;height:48px;border-radius:50%;background:#fffa}
 #phoneBtn{position:fixed;right:14px;top:228px;width:46px;height:46px;border-radius:12px;border:2px solid #fff6;background:#1a2230dd;color:#fff;font-size:22px;z-index:8}#phoneBtn.badge::after{content:attr(data-badge);position:absolute;right:-6px;top:-6px;background:#e0443a;color:#fff;border-radius:10px;font:700 11px system-ui;padding:2px 6px}
 #phone{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);width:min(440px,94vw);height:min(760px,92vh);background:#0d1218f2;border:2px solid #3a4655;border-radius:26px;z-index:30;flex-direction:column;color:#fff;font:13px system-ui;overflow:hidden}
 #phone .ph-top{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid #fff2}#phone .ph-top .ph-clock{flex:1;text-align:right;opacity:.75}#phone .ph-top button{background:none;border:0;color:#fff;font-size:20px}
@@ -24,7 +24,7 @@ canvas{display:block}
 #phone .ph-bar{height:6px;background:#ffffff1c;border-radius:4px;margin:6px 0}#phone .ph-bar i{display:block;height:100%;border-radius:4px}
 @media (pointer:coarse){#phoneBtn{top:140px}}
 #pad{position:fixed;right:14px;bottom:18px;width:250px;height:240px;pointer-events:none}#pad .rb{pointer-events:auto;position:absolute;border-radius:50%;border:2px solid #fff6;background:#1a2230cc;color:#fff;font:700 13px system-ui;display:flex;align-items:center;justify-content:center;text-align:center;padding:4px;touch-action:none;user-select:none;-webkit-user-select:none;line-height:1.1}
-#bA{right:0;bottom:0;width:94px;height:94px;background:#2f6bd8e0!important;font-size:15px!important}#bA.off{opacity:.35}#bB{right:104px;bottom:4px;width:78px;height:78px;background:#b4383ad8!important}#bC{right:6px;bottom:106px;width:68px;height:68px}#bD{right:90px;bottom:92px;width:60px;height:60px;font-size:11px!important}#bM{right:20px;bottom:186px;width:46px;height:46px;font-size:20px!important}
+#bA{right:0;bottom:0;width:98px;height:98px;background:#2f6bd8e0!important;font-size:15px!important}#bA.off{opacity:.35}#bB{right:104px;bottom:4px;width:78px;height:78px;background:#b4383ad8!important}#bC{right:6px;bottom:106px;width:68px;height:68px}#bD{right:90px;bottom:92px;width:60px;height:60px;font-size:11px!important}#bM{right:20px;bottom:186px;width:46px;height:46px;font-size:20px!important}
 #pad .rb.down,.chip.down,#tpanel button.down{filter:brightness(1.6);transform:scale(.94)}
 #chips{position:fixed;right:14px;bottom:262px;display:flex;flex-wrap:wrap-reverse;justify-content:flex-end;gap:8px;max-width:62vw}.chip{height:42px;padding:0 15px;border-radius:21px;border:2px solid #ffd34a99;background:#2a2410d8;color:#ffe9a8;font:700 13px system-ui;touch-action:none;user-select:none}
 #tpanel{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);display:grid;grid-template-columns:repeat(3,98px);gap:10px;padding:14px;border-radius:16px;background:rgba(10,14,20,.92);z-index:20}#tpanel button{height:58px;border-radius:14px;border:2px solid #fff5;background:#1a2230;color:#fff;font:700 13px system-ui;touch-action:none}#tpanel .x{grid-column:1/-1;height:44px;background:#3a2020}

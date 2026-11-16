@@ -177,3 +177,20 @@ Scénario de vérification : `node tools/collisions.cjs <dossier>`. Limite : les
 
 ## Fichier unique (à envoyer ou copier)
 `npm run single` fabrique `release/Pontcharra.html` (≈ 8 Mo) : le jeu complet dans un seul fichier (code, carte, données, personnages, animations), qui s'ouvre directement dans Chrome (double-clic, pièce jointe, clé USB), sans serveur ni connexion. La sauvegarde reste dans le navigateur qui l'a ouvert.
+
+## Sons et jouabilité sur téléphone (refonte)
+- **Bande son entièrement refaite avec de vrais enregistrements** (Meta, CC0) :
+  - pas sur béton, herbe ou parquet, en marchant ou en courant ;
+  - coups de poing et de pied, souffles des ratés, cris et voix de douleur ;
+  - portes, portières, démarrage, moteur enregistré qui monte dans les tours ;
+  - ambiance de ville le jour, nature et oiseaux, nuit, pluie, intérieur feutré ; chiens, verre brisé, tôle, crochetage, fouille, chasse d'eau, notifications ;
+  - le tout passe dans un compresseur (pas de saturation), avec une réverbération de rue.
+- **Bâtiments** : on ressort en franchissant la porte, ou avec le bouton jaune « Sortir » (Échap au clavier), affiché en permanence à l'intérieur.
+- **Plein écran** : la barre d'adresse disparaît dès le premier appui (et revient au suivant si on en sort) ; bouton « Plein écran » dans ☰.
+- **Commandes** :
+  - joystick flottant, qui apparaît sous le pouce gauche ; course en le poussant à fond ;
+  - caméra qui se replace derrière le personnage quand il avance ;
+  - aide à la visée pour les coups et le tir ;
+  - zones d'interaction plus larges ;
+  - en voiture : Gaz, Frein/arrière, Frein à main et Klaxon sous le pouce droit, le joystick servant de volant, « Descendre » en jaune.
+- Conseils de prise en main au premier lancement. Test : `node tools/mobile.cjs`.

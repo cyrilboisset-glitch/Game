@@ -80,7 +80,7 @@ export class Underworld {
   /** Arrestation : tout le butin porté et dans le coffre est saisi ; la planque est épargnée. */
   seize() { const n = this.bag.length + this.trunk.length; this.bag = []; this.trunk = []; this.bleeding = false; return n; }
   /** Blessure : au-delà de 10 points, on peut se mettre à saigner. */
-  hurt(dmg: number) { const g = this.g; g.needs.s.sante = Math.max(0, g.needs.s.sante - dmg); if (g.mode === 'foot' && dmg >= 5) g.player.hit(dmg > 14); if (dmg >= 10 && !this.bleeding && Math.random() < 0.55) { this.bleeding = true; g.hud.toast('Vous saignez : soignez-vous (3 : trousse, pharmacie, planque).', 4); } }
+  hurt(dmg: number) { const g = this.g; g.needs.s.sante = Math.max(0, g.needs.s.sante - dmg); if (g.mode === 'foot' && dmg >= 5) { g.player.hit(dmg > 14); g.sfx('hit', dmg > 14 ? 1 : 0.4); g.sfx('hurt'); } if (dmg >= 10 && !this.bleeding && Math.random() < 0.55) { this.bleeding = true; g.hud.toast('Vous saignez : soignez-vous (3 : trousse, pharmacie, planque).', 4); } }
   heal() { if (this.kits <= 0) { this.g.hud.toast('Pas de trousse de soins.'); return; } this.kits--; this.bleeding = false; this.g.needs.s.sante = Math.min(100, this.g.needs.s.sante + 30); this.g.hud.toast('Pansement fait : le saignement s\'arrête.', 2.5); }
 
   /** Tir au pistolet (F) : jamais si un enfant est dans la ligne de mire, jamais près d'une école. */
@@ -147,7 +147,7 @@ export class Underworld {
     m.opts[this.sel % m.opts.length].run(); this.sel = 0; void g; return true;
   }
   private openCache(c: Cache) {
-    const g = this.g, i = this.caches.indexOf(c); g.looted.add('cache:' + i); if (this.cacheMeshes[i]) this.cacheMeshes[i].visible = false; g.sfx('ui');
+    const g = this.g, i = this.caches.indexOf(c); g.looted.add('cache:' + i); if (this.cacheMeshes[i]) this.cacheMeshes[i].visible = false; g.sfx('loot');
     const W: Record<string, string> = { batte: 'une batte', barre: 'une barre de fer', cle: 'une clé à molette', bouteille: 'une bouteille' };
     switch (c.what) {
       case 'argent': g.money += c.n; g.hud.toast(`Dans ${c.desc} : ${c.n} € en liquide.`, 3.5); break;

@@ -22,12 +22,13 @@ export function touchContext(prompt: string, s: CtxState): TouchCtx {
   const f = keyText(prompt, 'F'); let attack: string | null = null;
   if (s.mode === 'foot') attack = f ? verb(f) : s.inside ? null : s.weapon === 'pistolet' && s.ammo > 0 ? 'Tirer' : 'Frapper';
   // boutons contextuels
+  if (s.inside) chips.push(['exit', 'Sortir']);
   if (/Espace : /.test(prompt)) chips.push(['jump', 'Sauter']);
   if (keyText(prompt, 'N')) chips.push(['next', 'Suivant']);
   const b = keyText(prompt, 'B'); if (b && !/^valider/i.test(b)) chips.push(['buy', verb(b) ?? 'Valider']); else if (/B\/E : valider/.test(prompt) && primary !== 'Valider') chips.push(['buy', 'Valider']);
   const g = keyText(prompt, 'G'); if (g) chips.push(s.mode === 'car' ? ['garage', 'Garage'] : ['fire', 'Feu']);
   if (s.mode === 'car' && s.night) chips.push(['lights', 'Phares']);
-  if (s.mode === 'car') chips.push(['radio', 'Radio']);
+  if (s.mode === 'car') { chips.unshift(['action', primary ?? 'Descendre']); chips.push(['radio', 'Radio']); }
   // besoins urgents
   if (s.faim < 35 && s.food > 0) chips.push(['eat', 'Manger']);
   if (s.soif < 35 && s.water > 0) chips.push(['drink', 'Boire']);
