@@ -26,6 +26,8 @@ import { Input } from './ui/input';
 import { Hud } from './ui/hud';
 import { Minimap } from './ui/minimap';
 import { touchContext } from './ui/touchctx';
+import { Debris } from './vehicles/wreck';
+import { Radio } from './audio/radio';
 import * as Save from './core/save';
 import { RoadGraph } from './roads/graph';
 import { buildPopulation, loadAddresses } from './npc/population';
@@ -76,7 +78,7 @@ const spotsOf = (types: string[]) => { const out: { x: number; z: number; nom: s
 const dead: { x: number; z: number }[] = []; const nodes: { x: number; z: number }[] = []; graph.pts.forEach((p, i) => { const d = graph.degree(i); if (d === 1) dead.push({ x: p[0], z: p[1] }); if (d >= 2 && i % 9 === 0) nodes.push({ x: p[0], z: p[1] }); });
 const schools = pois.filter(p => ['school', 'college', 'kindergarten'].includes(p.sous_type)).map(p => ({ x: p.x, z: p.y }));
 const neutres0 = neutralSpots(dead, (x, z) => game.coll.resolve({ x, z }, 35).depth > 0, schools);
-game.avatars = avatars; game.uw.setup(neutres0, graph.pts.filter((_, i) => i % 7 === 3 && graph.degree(i) >= 2).map(p => ({ x: p[0], z: p[1] })), schools, npcs); game.uw.buildMarkers(scene);
+game.avatars = avatars; game.debris = new Debris(scene); game.uw.setup(neutres0, graph.pts.filter((_, i) => i % 7 === 3 && graph.degree(i) >= 2).map(p => ({ x: p[0], z: p[1] })), schools, npcs); game.uw.buildMarkers(scene);
 const neutres1 = neutres0.filter(s => ![game.uw.fence, ...game.uw.dens].some(d => d && d.x === s.x && d.z === s.z));
 game.arson.attach(scene, (x, z) => { const i = graph.nearest(x, z, 60, true); if (i < 0) return null; const [px, pz] = graph.pts[i]; const e = graph.adj[i][0]; const q = e ? graph.pts[e.to] : [px + 1, pz]; const h = Math.atan2(q[0] - px, q[1] - pz); return { x: px + Math.cos(h) * 2.5, z: pz - Math.sin(h) * 2.5, h }; });
 game.heists.setup(neutres1, scene, game.uw.roadDist); const heistSpots = game.heists.targets.map(t => t.id); void heistSpots;
@@ -88,7 +90,7 @@ const beacon = new THREE.Group(); { const m = new THREE.MeshBasicMaterial({ colo
 // audio, qualité, réglages
 const grass = new GrassField(scene, chunks.mask!);
 const phoneTex = (() => { const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d')!; g.fillStyle = 'rgba(200,30,30,0.92)'; g.beginPath(); g.arc(32, 32, 28, 0, 7); g.fill(); g.font = '34px system-ui'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('📞', 32, 35); return new THREE.CanvasTexture(c); })();
-const phones: THREE.Sprite[] = []; for (let i = 0; i < 6; i++) { const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: phoneTex, depthTest: false, transparent: true, sizeAttenuation: false })); sp.scale.setScalar(0.045); sp.visible = false; sp.renderOrder = 10; scene.add(sp); phones.push(sp); } const audio = new AudioSys(); const settings = new Settings(); const touchDev = matchMedia('(pointer: coarse)').matches;
+const phones: THREE.Sprite[] = []; for (let i = 0; i < 6; i++) { const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: phoneTex, depthTest: false, transparent: true, sizeAttenuation: false })); sp.scale.setScalar(0.045); sp.visible = false; sp.renderOrder = 10; scene.add(sp); phones.push(sp); } const audio = new AudioSys(); const radio = new Radio(() => audio.radioOut()); game.onRadio = () => hud.toast(radio.cycle(), 2.5); const settings = new Settings(); const touchDev = matchMedia('(pointer: coarse)').matches;
 const quality = new AutoQuality(touchDev ? 'moyen' : 'eleve'); game.sfx = (n, v) => audio.sfx(n, v);
 function applyQuality(l: Level) {
   const p = levelParams(l); renderer.setPixelRatio(p.pixelRatio); renderer.setSize(innerWidth, innerHeight); post.setLevel(l === 'bas' ? 'aucun' : l === 'moyen' ? 'moyen' : 'eleve'); post.setSize(innerWidth, innerHeight);
@@ -147,7 +149,7 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
 
 function frame(now: number) {
   const dt = Math.max(0, Math.min(0.05, (now - last) / 1000)); last = now; acc += dt;
-  game.update(dt);
+  game.update(dt); radio.update(game.mode === 'car' && !game.interior.inside && !game.sleeping, settings.muted ? 0 : settings.volume);
   if (input.touch) { const N = game.needs.s, U = game.uw; input.setContext(touchContext(document.getElementById('prompt')!.textContent ?? '', { mode: game.mode, inside: game.interior.inside, sleeping: game.sleeping, observing: !!game.observed, weapon: game.weapon, ammo: U.ammo, weapons: game.weapons.size, night: game.night,
     faim: N.faim, soif: N.soif, vessie: N.vessie, energie: N.energie, sante: N.sante, food: game.inv.nourriture, water: game.inv.eau, kits: U.kits, bleeding: U.bleeding, wanted: game.heat.value > 0, hooded: game.hooded })); } const os = game.observed ? game.states.get(game.observed.id) : null; const fx = os ? os.x : game.pos.x, fz = os ? os.z : game.pos.z;
   chunks.update(fx, fz, VIEW); signs.update(fx, fz); updateStates(dt, fx, fz); placeCamera(dt);

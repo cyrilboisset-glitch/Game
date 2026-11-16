@@ -33,6 +33,7 @@ export function retargetClips(srcRoot: THREE.Object3D, clips: THREE.AnimationCli
   const hipsS = srcBones.get('Hips')!, hipsT = tgtBones.find(b => b.name === 'Hips')!;
   const ratio = hipsT.getWorldPosition(new THREE.Vector3()).y / hipsS.getWorldPosition(new THREE.Vector3()).y;
   const srcScale = new THREE.Vector3(); hipsS.parent!.getWorldScale(srcScale); const hipsLocalToWorld = srcScale.y * ratio;
+  const parentInv = hipsT.parent!.matrixWorld.clone().invert(); void hipsLocalToWorld;
   const mixer = new THREE.AnimationMixer(srcRoot); const out: THREE.AnimationClip[] = [];
   const tmp = new THREE.Quaternion(), inv = new THREE.Quaternion();
   for (const clip of clips) {
@@ -50,7 +51,8 @@ export function retargetClips(srcRoot: THREE.Object3D, clips: THREE.AnimationCli
         cur.set(b.name, world.clone());
         tmp.copy(pw).invert().multiply(world); rot.get(b.name)!.push(tmp.x, tmp.y, tmp.z, tmp.w);
       }
-      const hp = new THREE.Vector3().copy(hipsS.position).multiplyScalar(hipsLocalToWorld / (hipsT.parent!.getWorldScale(new THREE.Vector3()).y || 1)); hipPos.push(hp.x, hp.y, hp.z);
+      // bassin : position monde de la source (relative à sa racine), mise à l'échelle, puis exprimée dans le repère du parent du bassin cible (axes indépendants)
+      const hw = hipsS.getWorldPosition(new THREE.Vector3()).sub(srcRoot.getWorldPosition(new THREE.Vector3())).multiplyScalar(ratio).add(tgtRoot.getWorldPosition(new THREE.Vector3())); const hp = hw.applyMatrix4(parentInv); hipPos.push(hp.x, hp.y, hp.z);
     }
     act.stop(); mixer.uncacheClip(clip);
     const tracks: THREE.KeyframeTrack[] = tgtBones.map(b => new THREE.QuaternionKeyframeTrack(`${b.name}.quaternion`, times, rot.get(b.name)!));

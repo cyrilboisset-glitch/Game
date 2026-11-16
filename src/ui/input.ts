@@ -61,5 +61,5 @@ export class Input {
 }
 const THREE_clamp = (v: number) => Math.max(-1, Math.min(1, v));
 /** Actions rares, rangées dans le menu ☰. */
-const MENU: [string, string, boolean?][] = [['eat', 'Manger'], ['drink', 'Boire'], ['heal', 'Soin'], ['sleep', 'Dormir'], ['pee', 'Besoin'], ['hood', 'Capuche'], ['weapon', 'Objet'], ['fire', 'Feu'], ['missions', 'Missions'], ['dossier', 'Dossiers'], ['lights', 'Phares'], ['horn', 'Klaxon', true]];
+const MENU: [string, string, boolean?][] = [['eat', 'Manger'], ['drink', 'Boire'], ['heal', 'Soin'], ['sleep', 'Dormir'], ['pee', 'Besoin'], ['hood', 'Capuche'], ['weapon', 'Objet'], ['fire', 'Feu'], ['missions', 'Missions'], ['dossier', 'Dossiers'], ['lights', 'Phares'], ['radio', 'Radio'], ['horn', 'Klaxon', true]];
 export interface TouchCtx { primary: string | null; act?: string; attack: string | null; car: boolean; chips: [string, string][]; }

@@ -45,7 +45,7 @@ export class Player {
   /** Au volant : assis à la place du conducteur (à gauche), mains sur le volant ; suit la caisse (roulis, tangage). */
   seat(body: THREE.Object3D, dt: number) {
     if (!this.av) return; const A = this.av; body.updateWorldMatrix(true, false); const p = new THREE.Vector3(0.36, 0.1, -0.12); body.localToWorld(p); this.root.position.copy(p); const q = new THREE.Quaternion(); body.getWorldQuaternion(q); this.root.quaternion.copy(q);
-    this.root.visible = true; this.act = null; if (this.box) this.box.visible = false; A.root.position.set(0, 0, 0); A.pose('carry', 0, true); A.pose('kick', 0, true); A.set('Drive'); A.update(dt);
+    this.root.visible = true; this.act = null; if (this.box) this.box.visible = false; A.root.position.set(0, 0, 0); A.pose('carry', 0, true); A.pose('kick', 0, true); A.set('Drive'); if (A.current !== 'Drive') A.release(0.25); A.update(dt);
   }
   unseat() { this.root.quaternion.identity(); this.root.rotation.set(0, this.heading, 0); this.av?.set('Idle'); }
   /** Sac volumineux porté devant soi (butin lourd). */

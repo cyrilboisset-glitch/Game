@@ -19,7 +19,7 @@ describe('boutons tactiles contextuels', () => {
     const m = touchContext('Receleur — Gants — 10 € · N : suivant · B/E : valider', base); expect(m.primary).toBe('Valider'); expect(m.chips.map(x => x[0])).toEqual(['next']);
     const i = touchContext('E : Passer en caisse (5 €) · F : braquer la caisse', { ...base, inside: true }); expect(i.primary).toBe('Passer'); expect(i.attack).toBe('Braquer');
     expect(touchContext('E : Fouiller l\'armoire', { ...base, inside: true }).attack).toBeNull();
-    const c = touchContext('E : descendre · L : phares · G : garage', { ...base, mode: 'car', night: true }); expect(c.primary).toBe('Descendre'); expect(c.attack).toBeNull(); expect(c.car).toBe(true); expect(c.chips.map(x => x[0])).toEqual(['garage', 'lights']);
+    const c = touchContext('E : descendre · L : phares · G : garage', { ...base, mode: 'car', night: true }); expect(c.primary).toBe('Descendre'); expect(c.attack).toBeNull(); expect(c.car).toBe(true); expect(c.chips.map(x => x[0])).toEqual(['garage', 'lights', 'radio']);
     expect(touchContext('', { ...base, sleeping: true })).toMatchObject({ primary: 'Réveil', act: 'sleep' });
   });
   it('besoins urgents et situations : manger, soin, capuche, objet', () => {

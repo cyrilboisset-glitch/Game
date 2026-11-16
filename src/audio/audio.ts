@@ -8,6 +8,8 @@ export class AudioSys {
   volume = 0.7; muted = false; private stepT = 0; private birdT = 2; private t = 0;
   constructor() { const start = () => { this.init(); removeEventListener('pointerdown', start); removeEventListener('keydown', start); }; addEventListener('pointerdown', start); addEventListener('keydown', start); }
   get ready() { return !!this.ctx; }
+  /** Sortie pour la radio de la voiture. */
+  radioOut() { return this.ctx && this.master && this.noise ? { ctx: this.ctx, dest: this.master, noise: this.noise } : null; }
   private init() {
     if (this.ctx) return; const C = window.AudioContext || (window as any).webkitAudioContext; if (!C) return; const ctx = (this.ctx = new C()); this.master = ctx.createGain(); this.master.connect(ctx.destination); this.apply();
     const len = ctx.sampleRate * 2; this.noise = ctx.createBuffer(1, len, ctx.sampleRate); const d = this.noise.getChannelData(0); let b = 0; for (let i = 0; i < len; i++) { const w = Math.random() * 2 - 1; b = (b + 0.02 * w) / 1.02; d[i] = w * 0.5 + b * 3; }   // bruit rose approximatif
@@ -39,6 +41,7 @@ export class AudioSys {
       case 'arrest': [440, 370, 311, 262].forEach((f, i) => this.tone(f, 0.35, 'square', 0.08, i * 0.18)); break;
       case 'alarm': for (let i = 0; i < 6; i++) this.tone(i % 2 ? 1500 : 1100, 0.14, 'square', 0.07, i * 0.16); break;
       case 'shot': this.burst(2400, 0.18, 0.6 * k + 0.1); this.tone(90, 0.16, 'sine', 0.35 * k, 0, 40); break;
+      case 'horn': this.tone(420, 0.22, 'sawtooth', 0.05 * k + 0.01, 0, 420); this.tone(530, 0.22, 'sawtooth', 0.05 * k + 0.01, 0, 530); this.tone(420, 0.3, 'sawtooth', 0.05 * k + 0.01, 0.3, 420); this.tone(530, 0.3, 'sawtooth', 0.05 * k + 0.01, 0.3, 530); break;
       case 'ui': this.tone(660, 0.07, 'sine', 0.06); break;
     }
   }

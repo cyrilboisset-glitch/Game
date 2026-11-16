@@ -11,6 +11,7 @@ export class Car {
   pos = new THREE.Vector3(); heading = 0; speed = 0; steer = 0; lateral = 0; yawRate = 0;
   private wheelMeshes: { m: THREE.Mesh; front: boolean }[] = []; private mats = vehicleMaterials();
   private geos: THREE.BufferGeometry[] = []; private orig: Float32Array[] = []; broken = new Set<number>(); cracked = false;
+  roll: { t: number; dur: number; turns: number; side: number } | null = null; flipped = false; lost = new Set<string>();
   private doorP?: THREE.Group; private doorCur = 0; private doorTgt = 0;
   headlights: THREE.SpotLight[] = []; beams: THREE.Mesh[] = []; lightsOn = false; slip = 0; braking = false; wheelRoll = 0; smokeAcc = 0;
   get length() { return this.spec.L; }
@@ -38,12 +39,20 @@ export class Car {
   private setCracked(on: boolean) { this.cracked = on; const m = this.mats.glass as THREE.MeshStandardMaterial; m.map = on ? crackTexture() : null; m.color.set(on ? 0x8a9aa6 : 0x0c141c); m.opacity = on ? 0.88 : 0.72; m.needsUpdate = true; }
   /** Dégâts : retourne true si le véhicule vient de tomber en panne. */
   damage(amount: number) { const was = this.hp > 0; this.hp = Math.max(0, this.hp - amount / this.spec.mass); this.refreshPaint(); return was && this.hp <= 0; }
-  repair() { this.hp = this.spec.hp; this.refreshPaint(); this.geos.forEach((g, i) => { const p = g.getAttribute('position') as THREE.BufferAttribute; (p.array as Float32Array).set(this.orig[i]); p.needsUpdate = true; g.computeVertexNormals(); }); this.broken.clear(); this.setCracked(false); this.setLights(this.lightsOn); }
+  repair() { this.flipped = false; this.roll = null; this.lost.clear(); this.body.rotation.set(0, 0, 0); this.body.position.set(0, 0, 0); this.hp = this.spec.hp; this.refreshPaint(); this.geos.forEach((g, i) => { const p = g.getAttribute('position') as THREE.BufferAttribute; (p.array as Float32Array).set(this.orig[i]); p.needsUpdate = true; g.computeVertexNormals(); }); this.broken.clear(); this.setCracked(false); this.setLights(this.lightsOn); }
+  /** Tonneaux : `turns` demi-tours entiers = retombe sur les roues, sinon sur le toit (épave). */
+  startRoll(side: number, turns: number) { if (this.roll || this.flipped) return; this.roll = { t: 0, dur: 0.55 + turns * 0.5, turns, side: Math.sign(side) || 1 }; }
+  /** Pièce arrachée (capot ou portière) : retourne un maillage à lancer, positionné dans le monde. */
+  tearOff(part: 'capot' | 'porte') {
+    if (this.lost.has(part)) return null; this.lost.add(part); const sp = this.spec; const mat = new THREE.MeshStandardMaterial({ color: this.paint, roughness: 0.45, metalness: 0.3 });
+    const m = part === 'capot' ? new THREE.Mesh(new THREE.BoxGeometry(sp.W * 0.8, 0.05, sp.L * 0.26), mat) : new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.62, 1.05), mat); m.castShadow = true;
+    const p = part === 'capot' ? new THREE.Vector3(0, 1.0, sp.L * 0.32) : new THREE.Vector3(sp.W / 2, 0.75, 0.05); this.body.updateWorldMatrix(true, false); this.body.localToWorld(p); m.position.copy(p); m.rotation.y = this.heading; return m;
+  }
   /** Ouvre (1) ou ferme (0) la portière conducteur. */
   door(t: number) { this.doorTgt = t; }
   setFlash(on: boolean) { this.mats.lights.color.setScalar(on ? 1 : 0.35); }
   update(dt: number, c: Controls) {
-    const s = this.spec; const up = 1 + this.upgrade * 0.08; const dead = this.dead; const accel = s.accel * up * (this.hp < s.hp * 0.25 ? 0.6 : 1);
+    const s = this.spec; const up = 1 + this.upgrade * 0.08; const dead = this.dead || this.flipped || !!this.roll; const accel = s.accel * up * (this.hp < s.hp * 0.25 ? 0.6 : 1);
     if (c.throttle > 0 && !dead) this.speed += accel * c.throttle * (1 - Math.max(0, this.speed) / (s.maxSpeed * up)) * dt;
     if (c.brake > 0) { if (this.speed > 0.3) this.speed -= s.brake * c.brake * dt; else if (!dead) this.speed -= 5 * c.brake * dt; this.speed = Math.max(this.speed, -9); }
     this.speed -= Math.sign(this.speed) * (0.012 * this.speed * this.speed + 0.25 + (dead ? 2.5 : 0)) * dt; if (Math.abs(this.speed) < 0.05 && !c.throttle && !c.brake) this.speed = 0;
@@ -61,7 +70,10 @@ export class Car {
     for (const w of this.wheelMeshes) { w.m.rotation.set(this.wheelRoll, w.front ? this.steer * 0.8 : 0, 0, 'YXZ'); }
     this.root.position.copy(this.pos); this.root.rotation.y = this.heading;
     if (this.doorP) { this.doorCur += (this.doorTgt - this.doorCur) * Math.min(1, dt * 9); this.doorP.visible = this.doorCur > 0.03; this.doorP.rotation.y = -this.doorCur * 1.05; }
-    this.body.rotation.z = THREE.MathUtils.lerp(this.body.rotation.z, -this.yawRate * this.speed * 0.004, 0.1);
-    this.body.rotation.x = THREE.MathUtils.lerp(this.body.rotation.x, -(c.throttle - c.brake) * 0.015, 0.1);
+    if (this.roll) {   // tonneaux autour du centre de la caisse (0,75 m), avec un saut
+      const r = this.roll; r.t += dt; const k = Math.min(1, r.t / r.dur), e = 1 - (1 - k) ** 2, a = r.side * r.turns * Math.PI * e, C = 0.75; this.body.rotation.set(0, 0, a); this.body.position.set(C * Math.sin(a), C - C * Math.cos(a) + Math.sin(k * Math.PI) * (0.6 + r.turns * 0.3), 0); this.speed *= 1 - Math.min(1, dt * 1.8);
+      if (k >= 1) { this.roll = null; if (r.turns % 2 === 1) { this.flipped = true; this.hp = 0; this.body.rotation.set(0, 0, Math.PI); this.body.position.set(0, 2 * C, 0); } else { this.body.rotation.set(0, 0, 0); this.body.position.set(0, 0, 0); } }
+    } else if (this.flipped) { this.speed *= 1 - Math.min(1, dt * 4); }
+    else { this.body.rotation.z = THREE.MathUtils.lerp(this.body.rotation.z, -this.yawRate * this.speed * 0.004, 0.1); this.body.rotation.x = THREE.MathUtils.lerp(this.body.rotation.x, -(c.throttle - c.brake) * 0.015, 0.1); }
   }
 }

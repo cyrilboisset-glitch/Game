@@ -2,7 +2,7 @@
 const { chromium } = require('playwright'); const out = process.argv[2] || '.';
 const step = (p, n) => p.evaluate(`(()=>{const G=window.__game.game;for(let i=0;i<${n};i++)G.update(1/30);})()`);
 const ev = (p, js) => p.evaluate(js); const cur = p => ev(p, `G.player['av'].current`);
-const shot = async (p, name) => { await ev(p, 'window.__game.sync()'); await p.waitForTimeout(2500); await p.screenshot({ path: out + '/' + name }); };
+const shot = async (p, name) => { await ev(p, 'window.__game.sync()'); await p.waitForTimeout(2500); await p.screenshot({ path: out + '/' + name, timeout: 120000 }); };
 (async () => {
   const b = await chromium.launch({ executablePath: process.env.CHROME_BIN, args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
   const p = await b.newPage({ viewport: { width: 1100, height: 650 } }); p.on('pageerror', e => console.log('PAGEERR', e.message));
@@ -16,9 +16,9 @@ const shot = async (p, name) => { await ev(p, 'window.__game.sync()'); await p.w
   // 2. accroupi
   await p.keyboard.press('KeyC'); await step(p, 10); const ci = await cur(p); await p.keyboard.down('KeyW'); await step(p, 15); console.log('2. accroupi :', ci, '→ en avançant', await cur(p)); await p.keyboard.up('KeyW'); await p.keyboard.press('KeyC'); await step(p, 5);
   // 3. clôture
-  const fz = await ev(p, `(()=>{const ch=[...G.props['chunks'].values()];for(const s of ch){if(!s.f)continue;for(let i=0;i<s.f.length;i+=5){const ax=s.f[i],az=s.f[i+1],bx=s.f[i+2],bz=s.f[i+3];const mx=(ax+bx)/2,mz=(az+bz)/2,l=Math.hypot(bx-ax,bz-az);const nx=-(bz-az)/l,nz=(bx-ax)/l;for(const sg of [1,-1]){const x=mx+nx*sg*0.9,z=mz+nz*sg*0.9;const o={x:mx-nx*sg*1.2,z:mz-nz*sg*1.2};if(G.coll.resolve({x,z},0.4).depth>0||G.coll.resolve(o,0.45).depth>0)continue;G.player.pos.set(x,0,z);G.player.heading=Math.atan2(-nx*sg,-nz*sg);G.camYaw=G.player.heading+0.9;G.camPitch=0.15;return {h:s.f[i+4],x,z}}}}return null})()`);
+  const fz = await ev(p, `(()=>{const ch=[...G.props['chunks'].values()];for(const s of ch){if(!s.f)continue;for(let i=0;i<s.f.length;i+=5){const ax=s.f[i],az=s.f[i+1],bx=s.f[i+2],bz=s.f[i+3];const mx=(ax+bx)/2,mz=(az+bz)/2,l=Math.hypot(bx-ax,bz-az);const nx=-(bz-az)/l,nz=(bx-ax)/l;for(const sg of [1,-1]){const x=mx+nx*sg*0.9,z=mz+nz*sg*0.9;const o={x:mx-nx*sg*1.2,z:mz-nz*sg*1.2};if(G.coll.resolve({x,z},0.4).depth>0||G.coll.resolve(o,0.45).depth>0||G.interior.index.find(x,z,3))continue;G.player.pos.set(x,0,z);G.player.heading=Math.atan2(-nx*sg,-nz*sg);G.camYaw=G.player.heading+0.9;G.camPitch=0.15;return {h:s.f[i+4],x,z}}}}return null})()`);
   await step(p, 3); console.log('3. devant une clôture :', await p.textContent('#prompt')); await p.keyboard.press('Space'); await step(p, 8); const mid = await cur(p); const y = await ev(p, 'G.player.root.position.y.toFixed(2)'); await shot(p, 'anim-saut.png'); await step(p, 25);
-  console.log('   saut :', mid, '(hauteur', y, 'm) → passé de l\'autre côté :', (await ev(p, `Math.hypot(G.player.pos.x-${fz.x},G.player.pos.z-${fz.z})`)).toFixed(1), 'm');
+  console.log('   saut :', mid, '(hauteur', y, 'm) → passé de l\'autre côté :', (await ev(p, `Math.hypot(G.player.pos.x-(${fz.x}),G.player.pos.z-(${fz.z}))`)).toFixed(1), 'm');
   // 4. banc
   const bn = await ev(p, `(()=>{for(const s of G.props['chunks'].values()){if(s.b&&s.b.length){const x=s.b[0]+s.b[2]*1.0,z=s.b[1]+s.b[3]*1.0;G.player.pos.set(x,0,z);G.camYaw=Math.atan2(-s.b[2],-s.b[3])+0.6;G.camPitch=0.12;return true}}return false})()`);
   if (bn) { await step(p, 3); console.log('4. près d\'un banc :', await p.textContent('#prompt')); await p.keyboard.press('KeyE'); await step(p, 40); console.log('   assis :', await cur(p), '| prompt', await p.textContent('#prompt')); await shot(p, 'anim-banc.png'); await p.keyboard.press('KeyE'); await step(p, 5); console.log('   se lève :', await cur(p)); await step(p, 40); }
