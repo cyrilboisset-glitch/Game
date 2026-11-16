@@ -154,7 +154,7 @@ function frame(now: number) {
   if (!game.interior.inside) npcRender.update(dt, statesArr, fx, fz, game.observed?.id ?? null, now, game.clock.scale, game.overrides()); if (game.observed && os) panel.update(game.observed, os, sim, game.clock.day, game.clock.hour, now, game.clock.scale); else if (panel.el.style.display !== 'none') panel.show(false);
   const lv = quality.update(dt); if (lv) applyQuality(lv);
   vrender.begin(); const flashOn = Math.floor(now / 280) % 2 ? 1 : 0.2;
-  for (const v of vworld.list) { if (Math.abs(v.x - fx) > VEH_RANGE || Math.abs(v.z - fz) > VEH_RANGE) continue; vrender.add(v.type, v.paint, v.x, v.z, v.h, SPECS[v.type].police && (v.kind === 'patrouille' || v.kind === 'poursuite' || (v.kind === 'gare' && game.heat.stars > 0)) ? flashOn : 1, v.hp / SPECS[v.type].hp); }
+  for (const v of vworld.list) { if (Math.abs(v.x - fx) > VEH_RANGE || Math.abs(v.z - fz) > VEH_RANGE) continue; vrender.add(v.type, v.paint, v.x, v.z, v.h, SPECS[v.type].police && (v.kind === 'patrouille' || v.kind === 'poursuite' || (v.kind === 'gare' && game.heat.stars > 0)) ? flashOn : 1, v.hp / SPECS[v.type].hp, v.dent); }
   game.npcCars = []; for (const d of npcRender.drivers) { const n = game.npcs.get(d.id)!; const t = n.seed % 9 === 0 ? 'utilitaire' : CIVIL_TYPES[n.seed % CIVIL_TYPES.length]; vrender.add(t, PAINTS[(n.seed >> 3) % PAINTS.length], d.x, d.z, d.h); game.npcCars.push({ x: d.x, z: d.z, h: d.h, speed: d.speed, type: t }); }
   vrender.end(); car.setFlash(false);
   if (game.mode === 'car') hud.vehicle(car.spec.nom, Math.round(Math.abs(car.speed) * 3.6), Math.round(car.hp / car.spec.hp * 100), car.upgrade); else hud.hideVehicle();

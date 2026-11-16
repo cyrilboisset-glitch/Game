@@ -16,6 +16,12 @@ export class Player {
     const m = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.035, len, 8).translate(0, -len / 2 + 0.05, 0), new THREE.MeshStandardMaterial({ color, roughness: 0.5, metalness: 0.4 })); const ws = new THREE.Vector3(); hand.getWorldScale(ws); m.scale.setScalar(1 / (ws.x || 1)); m.rotation.x = Math.PI / 2.4; m.castShadow = true; hand.add(m); this.weaponMesh = m; this.armed = true;
   }
   punch() { this.punchT = 0.36; }
+  /** Au volant : assis à la place du conducteur (à gauche), mains sur le volant ; suit la caisse (roulis, tangage). */
+  seat(body: THREE.Object3D, dt: number) {
+    if (!this.av) return; const A = this.av; body.updateWorldMatrix(true, false); const p = new THREE.Vector3(0.36, 0.08, -0.12); body.localToWorld(p); this.root.position.copy(p); const q = new THREE.Quaternion(); body.getWorldQuaternion(q); this.root.quaternion.copy(q);
+    this.root.visible = true; if (this.box) this.box.visible = false; A.root.position.z = 0; for (const n of ['crouch', 'pick', 'carry', 'aim', 'punch', 'swingUp', 'swingDown']) A.pose(n, 0, true); A.pose('sit', 1, true); A.set('Idle'); A.update(dt);
+  }
+  unseat() { this.av?.pose('sit', 0, true); this.root.quaternion.identity(); this.root.rotation.set(0, this.heading, 0); }
   /** Bras tendus pour tirer (pistolet). */
   aim(t = 0.7) { this.aimT = t; }
   /** Sac volumineux porté devant soi (butin lourd). */

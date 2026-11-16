@@ -1,6 +1,7 @@
 // Habitants pris en main par le jeu (hors de leur emploi du temps) : assommés/renversés, en fuite, ou qui se battent.
 export type Mode = 'ko' | 'fuite' | 'combat' | 'fige';
-export interface Ctl { id: number; mode: Mode; x: number; z: number; h: number; until: number; hp: number; cd: number; speed: number; reported: boolean; }
+export interface Ctl { id: number; mode: Mode; x: number; z: number; h: number; until: number; hp: number; cd: number; speed: number; reported: boolean; t0?: number; vx?: number; vz?: number; rise?: number; swing?: number; flinch?: number; }
+export const FALL = 0.45, RISE = 0.7;
 export interface Solver { resolve(p: { x: number; z: number }, r: number): unknown; }
 
 export class NpcControl {
@@ -8,7 +9,9 @@ export class NpcControl {
   get(id: number) { return this.map.get(id); }
   health(id: number) { return this.hp.get(id) ?? 100; }
   /** Met un habitant au sol pour `secs` secondes (KO, renversé). */
-  ko(id: number, x: number, z: number, h: number, secs: number) { this.map.set(id, { id, mode: 'ko', x, z, h, until: this.t + secs, hp: 0, cd: 0, speed: 0, reported: false }); }
+  ko(id: number, x: number, z: number, h: number, secs: number, vx = 0, vz = 0) { this.map.set(id, { id, mode: 'ko', x, z, h, until: this.t + secs, hp: 0, cd: 0, speed: 0, reported: false, t0: this.t, vx, vz }); }
+  /** Animation : 0→1 pendant la chute, 1 au sol ; pendant le relevé, 1→0. */
+  fallOf(c: Ctl) { if (c.mode === 'ko') return Math.min(1, (this.t - (c.t0 ?? -9)) / FALL); if (c.rise !== undefined && this.t < c.rise) return (c.rise - this.t) / RISE; return 0; }
   /** Mains en l'air (menacé) pendant `secs` secondes, puis fuite. */
   freeze(id: number, x: number, z: number, h: number, secs: number) { if (this.map.has(id)) return; this.map.set(id, { id, mode: 'fige', x, z, h, until: this.t + secs, hp: this.health(id), cd: 0, speed: 0, reported: false }); }
   /** Panique (coup de feu) : l'habitant s'enfuit s'il n'est pas déjà pris en main. */
@@ -17,9 +20,9 @@ export class NpcControl {
   hit(id: number, x: number, z: number, h: number, dmg: number, seed: number, armed: boolean): Mode {
     const hp = this.health(id) - dmg; this.hp.set(id, Math.max(0, hp));
     if (hp <= 0) { this.ko(id, x, z, h, 35 + (seed % 30)); return 'ko'; }
-    const cur = this.map.get(id); const fight = !armed && seed % 10 < 4 && hp > 35;
+    const cur = this.map.get(id); const fight = !armed && seed % 10 < 4 && hp > 35; const flinch = this.t + 0.35;
     const mode: Mode = cur?.mode === 'combat' && hp > 30 ? 'combat' : fight ? 'combat' : 'fuite';
-    this.map.set(id, { id, mode, x: cur?.x ?? x, z: cur?.z ?? z, h, until: this.t + (mode === 'fuite' ? 12 : 30), hp, cd: 0.8, speed: 0, reported: cur?.reported ?? false }); return mode;
+    this.map.set(id, { id, mode, x: cur?.x ?? x, z: cur?.z ?? z, h, until: this.t + (mode === 'fuite' ? 12 : 30), hp, cd: 0.8, speed: 0, reported: cur?.reported ?? false, flinch }); return mode;
   }
   /** Avance les habitants pilotés. Retourne les dégâts infligés au joueur et les habitants qui se relèvent (ils deviennent témoins). */
   update(dt: number, px: number, pz: number, solver?: Solver): { dmgToPlayer: number; woke: number[]; released: number[] } {
@@ -27,10 +30,11 @@ export class NpcControl {
     for (const c of this.map.values()) {
       const dx = c.x - px, dz = c.z - pz, d = Math.hypot(dx, dz) || 1e-3;
       if (c.mode === 'fige') { if (this.t > c.until) { c.mode = 'fuite'; c.until = this.t + 12; } if (solver) solver.resolve(c, 0.35); continue; }
-      if (c.mode === 'ko') { if (this.t > c.until) { c.mode = 'fuite'; c.until = this.t + 12; this.hp.set(c.id, 40); woke.push(c.id); } continue; }
+      if (c.mode === 'ko') { const k = Math.max(0, 1 - (this.t - (c.t0 ?? 0)) / 0.7); if (k > 0 && (c.vx || c.vz)) { c.x += (c.vx ?? 0) * k * dt; c.z += (c.vz ?? 0) * k * dt; if (solver) solver.resolve(c, 0.35); } if (this.t > c.until) { c.mode = 'fuite'; c.until = this.t + 12 + RISE; c.rise = this.t + RISE; this.hp.set(c.id, 40); woke.push(c.id); } continue; }
+      if (c.rise !== undefined && this.t < c.rise) { c.speed = 0; continue; }
       if (c.mode === 'fuite') { c.speed = 4.6; c.h = Math.atan2(dx, dz); c.x += Math.sin(c.h) * c.speed * dt; c.z += Math.cos(c.h) * c.speed * dt; if (this.t > c.until && d > 30) { this.map.delete(c.id); released.push(c.id); } }
       else { // combat : s'approche et frappe
-        c.h = Math.atan2(-dx, -dz); if (d > 1.25) { c.speed = 2.8; c.x += Math.sin(c.h) * c.speed * dt; c.z += Math.cos(c.h) * c.speed * dt; } else { c.speed = 0; c.cd -= dt; if (c.cd <= 0) { c.cd = 1.1; dmg += 6 + (c.id % 5); } }
+        c.h = Math.atan2(-dx, -dz); if (d > 1.25) { c.speed = 2.8; c.x += Math.sin(c.h) * c.speed * dt; c.z += Math.cos(c.h) * c.speed * dt; } else { c.speed = 0; c.cd -= dt; if (c.cd <= 0) { c.cd = 1.1; c.swing = this.t + 0.35; dmg += 6 + (c.id % 5); } }
         if (this.health(c.id) < 30) { c.mode = 'fuite'; c.until = this.t + 12; } if (d > 25 || this.t > c.until) { this.map.delete(c.id); released.push(c.id); }
       }
       if (solver) solver.resolve(c, 0.35);

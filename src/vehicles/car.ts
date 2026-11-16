@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { vehicleGeometry, vehicleMaterials } from './models';
 import { SPECS, type VehicleSpec, type VehicleType } from './specs';
+import { dent, crackTexture } from './damage';
 
 export interface Controls { throttle: number; brake: number; steer: number; handbrake: boolean; }
 
@@ -9,6 +10,7 @@ export class Car {
   root = new THREE.Group(); body = new THREE.Group(); spec: VehicleSpec = SPECS.depart; paint = 0xb9b2a0; hp = 70; upgrade = 0;
   pos = new THREE.Vector3(); heading = 0; speed = 0; steer = 0; lateral = 0; yawRate = 0;
   private wheelMeshes: { m: THREE.Mesh; front: boolean }[] = []; private mats = vehicleMaterials();
+  private geos: THREE.BufferGeometry[] = []; private orig: Float32Array[] = []; broken = new Set<number>(); cracked = false;
   headlights: THREE.SpotLight[] = []; beams: THREE.Mesh[] = []; lightsOn = false; slip = 0; braking = false; wheelRoll = 0; smokeAcc = 0;
   get length() { return this.spec.L; }
   get dead() { return this.hp <= 0; }
@@ -16,17 +18,24 @@ export class Car {
   setVehicle(type: VehicleType, paint: number, hp: number, upgrade = 0) {
     this.spec = SPECS[type]; this.paint = paint; this.hp = hp; this.upgrade = upgrade;
     this.body.clear(); this.wheelMeshes = []; this.headlights = [];
-    const g = vehicleGeometry(type, false); this.body.add(Object.assign(new THREE.Mesh(g.paint, this.mats.paint), { castShadow: true, receiveShadow: true }), Object.assign(new THREE.Mesh(g.trim, this.mats.trim), { castShadow: true }), new THREE.Mesh(g.glass, this.mats.glass), new THREE.Mesh(g.lights, this.mats.lights));
+    const g0 = vehicleGeometry(type, false); const g = { ...g0, paint: g0.paint.clone(), trim: g0.trim.clone(), glass: g0.glass.clone(), lights: g0.lights.clone() }; this.geos = [g.paint, g.trim, g.glass, g.lights]; this.orig = this.geos.map(q => (q.getAttribute('position').array as Float32Array).slice()); this.broken.clear(); this.setCracked(false); this.body.add(Object.assign(new THREE.Mesh(g.paint, this.mats.paint), { castShadow: true, receiveShadow: true }), Object.assign(new THREE.Mesh(g.trim, this.mats.trim), { castShadow: true }), new THREE.Mesh(g.glass, this.mats.glass), new THREE.Mesh(g.lights, this.mats.lights));
     for (const w of g.wheels) { const m = new THREE.Mesh(w.x < 0 ? g.wheelL : g.wheelR, this.mats.trim); m.position.set(w.x, w.y, w.z); m.castShadow = true; this.body.add(m); this.wheelMeshes.push({ m, front: w.front }); }
     const L = this.spec.L; for (const x of [-0.6, 0.6]) { const sp = new THREE.SpotLight(0xfff1d0, 0, 90, 0.5, 0.6, 1.4); sp.position.set(x, 0.75, L / 2 - 0.2); const t = new THREE.Object3D(); t.position.set(x * 0.5, 0.2, L / 2 + 25); this.body.add(sp, t); sp.target = t; this.headlights.push(sp); }
     for (const x of [-0.6, 0.6]) { const cone = new THREE.Mesh(new THREE.ConeGeometry(2.4, 16, 20, 1, true).translate(0, -8, 0).rotateX(-Math.PI / 2 + 0.08), new THREE.MeshBasicMaterial({ color: 0xfff2cf, transparent: true, opacity: 0.07, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false })); cone.position.set(x, 0.75, L / 2); cone.scale.set(0.45, 0.45, 1); cone.visible = false; this.body.add(cone); this.beams.push(cone); }
     this.root.add(this.body); this.refreshPaint(); if (this.lightsOn) this.setLights(true);
   }
   refreshPaint() { const dirt = 1 - Math.min(1, this.hp / this.spec.hp); this.mats.paint.color.set(this.paint).lerp(new THREE.Color(0x2a2522), dirt * 0.55); }
-  setLights(on: boolean) { this.lightsOn = on; for (const h of this.headlights) h.intensity = on ? 420 : 0; for (const b of this.beams) b.visible = on; }
+  setLights(on: boolean) { this.lightsOn = on; this.headlights.forEach((h, i) => (h.intensity = on && !this.broken.has(i) ? 420 : 0)); this.beams.forEach((b, i) => (b.visible = on && !this.broken.has(i))); }
+  /** Choc localisé (repère du véhicule) : tôle enfoncée, pare-brise fissuré au-delà d'un gros choc, phare cassé si l'avant est touché. */
+  impact(lx: number, lz: number, dmg: number) {
+    const hw = this.spec.W / 2, hl = this.spec.L / 2; dent(this.geos, lx, lz, Math.min(0.3, dmg * 0.012), 0.7 + Math.min(0.7, dmg * 0.02), hw, hl);
+    if (dmg > 14 && !this.cracked) this.setCracked(true);
+    if (lz > hl * 0.6 && dmg > 8) { const i = lx < 0 ? 0 : 1; if (!this.broken.has(i)) { this.broken.add(i); this.setLights(this.lightsOn); } }
+  }
+  private setCracked(on: boolean) { this.cracked = on; const m = this.mats.glass as THREE.MeshStandardMaterial; m.map = on ? crackTexture() : null; m.color.set(on ? 0x8a9aa6 : 0x0c141c); m.opacity = on ? 0.88 : 0.72; m.needsUpdate = true; }
   /** Dégâts : retourne true si le véhicule vient de tomber en panne. */
   damage(amount: number) { const was = this.hp > 0; this.hp = Math.max(0, this.hp - amount / this.spec.mass); this.refreshPaint(); return was && this.hp <= 0; }
-  repair() { this.hp = this.spec.hp; this.refreshPaint(); }
+  repair() { this.hp = this.spec.hp; this.refreshPaint(); this.geos.forEach((g, i) => { const p = g.getAttribute('position') as THREE.BufferAttribute; (p.array as Float32Array).set(this.orig[i]); p.needsUpdate = true; g.computeVertexNormals(); }); this.broken.clear(); this.setCracked(false); this.setLights(this.lightsOn); }
   setFlash(on: boolean) { this.mats.lights.color.setScalar(on ? 1 : 0.35); }
   update(dt: number, c: Controls) {
     const s = this.spec; const up = 1 + this.upgrade * 0.08; const dead = this.dead; const accel = s.accel * up * (this.hp < s.hp * 0.25 ? 0.6 : 1);
