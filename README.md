@@ -194,3 +194,7 @@ Scénario de vérification : `node tools/collisions.cjs <dossier>`. Limite : les
   - zones d'interaction plus larges ;
   - en voiture : Gaz, Frein/arrière, Frein à main et Klaxon sous le pouce droit, le joystick servant de volant, « Descendre » en jaune.
 - Conseils de prise en main au premier lancement. Test : `node tools/mobile.cjs`.
+
+## Données IGN (plus réaliste)
+
+Tutoriel : [docs/ign.md](docs/ign.md). Une fois les fichiers de la BD TOPO placés dans `data/`, lancer `python3 -I tools/import_ign.py data/ign-*.json`.

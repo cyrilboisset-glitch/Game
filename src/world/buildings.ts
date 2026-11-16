@@ -123,13 +123,14 @@ export function addBuilding(B: BuildBuilders, b: Build, idx: number) {
   const a = area(p); if (Math.abs(a) < 6) return false;
   // orientation : normales sortantes (le plan x/z est vu de dessus avec z vers le sud ⇒ orientation inversée)
   if (a > 0) p = p.slice().reverse();
-  const floors = b.l > 0 ? b.l : (b.h > 0 ? Math.max(1, Math.round(b.h / FLOOR_H)) : (Math.abs(a) > 600 ? 2 : (rnd() < 0.55 ? 2 : 3)));
+  const work = b.u === 'i' || b.u === 'a' || b.u === 'c' || b.u === 's';   // usage IGN : hangars, ateliers, grandes surfaces, gymnases
+  const floors = b.l > 0 ? b.l : (b.h > 0 ? Math.max(1, Math.round(b.h / FLOOR_H)) : b.u === 'x' ? 1 : work ? 1 : (Math.abs(a) > 600 ? 2 : (rnd() < 0.55 ? 2 : 3)));
   const h = b.h > 0 ? b.h : floors * FLOOR_H;
   BRICK = (idx * 2654435761 >>> 0) % 100 < 18 ? 1 : 0; const col = BRICK ? new THREE.Color(1, 0.96, 0.92).multiplyScalar(0.82 + rnd() * 0.22) : PLASTER[idx % PLASTER.length].clone().multiplyScalar(0.92 + rnd() * 0.12);
   wallRun(B, p, h, floors, col, idx);
   const pre = obb(p); const preFill = Math.abs(a) / Math.max(1, pre.a);
   const o = obb(p); const fill = Math.abs(a) / Math.max(1, o.a);
-  const useGable = Math.abs(a) < 420 && fill > 0.8 && p.length <= 10 && floors <= 4 && rnd() < 0.85;
+  const useGable = !work && Math.abs(a) < 420 && fill > 0.8 && p.length <= 10 && floors <= 4 && rnd() < 0.85;
   if (B.trim) details(B.trim, p, h, floors, col, idx, Math.abs(a) > 180, !useGable || floors >= 3); void preFill;
   if (useGable) { gable(B, p, h, new THREE.Color().setHSL(0.03 + rnd() * 0.03, 0.2 + rnd() * 0.25, 0.65 + rnd() * 0.35), col); }
   else flatRoof(B, p, h);

@@ -1,6 +1,7 @@
 import type { Pt } from './geom';
 export interface Road { t: string; n: string; o: number; p: Pt[]; }
-export interface Build { l: number; h: number; n: string; p: Pt[]; }
+/** u = usage IGN (r résidentiel, c commerce, i industriel, a agricole, x annexe, s sportif, g religieux), lg = logements IGN : présents seulement après tools/import_ign.py. */
+export interface Build { l: number; h: number; n: string; p: Pt[]; u?: string; lg?: number; }
 export interface Water { a: number; p: Pt[]; }
 export interface Green { k: string; p: Pt[]; }
 export interface WorldData { origin: [number, number]; roads: Road[]; builds: Build[]; rails: Pt[][]; waters: Water[]; greens: Green[]; }
