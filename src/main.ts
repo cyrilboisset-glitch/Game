@@ -66,7 +66,7 @@ const police = new Police(graph, vworld, traffic, game.coll); game.attachPolice(
 if (q.has('fresh') || q.has('t')) Save.reset(); else if (game.restore()) hud.toast('Partie reprise.');
 if (q.get('mode') === 'car') { game.mode = 'car'; player.root.visible = false; }
 // habitants
-const NPC_COUNT = +(q.get('npc') ?? 4000);
+const NPC_COUNT = +(q.get('npc') ?? 7350);   // population municipale INSEE 2023 (voir docs/hypotheses.md)
 const npcs = buildPopulation(world, pois, game.interior.index, graph, addrs, { x: a[0], z: a[1] }, NPC_COUNT);
 const sim = new NpcSim(npcs, graph); game.attachNpcs(npcs, sim); const npcRender = new NpcRenderer(scene, avatars, game.npcs); const panel = new ObservePanel();
 panel.onQuit = () => { game.stopObserving(); panel.show(false); }; panel.onSpeed = x => game.setSpeed(x);
@@ -101,15 +101,18 @@ let down: { x: number; y: number; t: number } | null = null;
 renderer.domElement.addEventListener('pointerdown', e => { down = { x: e.clientX, y: e.clientY, t: performance.now() }; });
 renderer.domElement.addEventListener('pointerup', e => { if (!down) return; const moved = Math.hypot(e.clientX - down.x, e.clientY - down.y), dt = performance.now() - down.t; down = null; if (moved < 9 && dt < 400 && !game.interior.inside) { const id = npcRender.pick(e.clientX, e.clientY, camera, innerWidth, innerHeight); if (id !== null) { game.observe(id); panel.show(true); } } });
 addEventListener('keydown', e => { if (e.code === 'KeyO' && !game.observed) { const v = npcRender.visible[0]; if (v) { game.observe(v.id); panel.show(true); } } });
-let lastSim = -1; const statesArr: any[] = []; let statesMs = 0;
-function updateStates(now: number, fx: number, fz: number) {
-  if (now - lastSim < 300) return; lastSim = now; const t0 = performance.now(); statesArr.length = 0; const day = game.clock.day, hour = game.clock.hour;
-  for (const n of npcs) {
+const statesArr: any[] = []; let statesMs = 0, rr = 0;
+/** États des habitants : tous recalculés en ~0,3 s, par tranches réparties sur les images (pas d'à-coup). Chemins détaillés (A*) seulement à moins de 330 m. */
+function updateStates(dt: number, fx: number, fz: number) {
+  const t0 = performance.now(); const day = game.clock.day, hour = game.clock.hour; const N = npcs.length;
+  const k = statesArr.length < N ? N : Math.min(N, Math.ceil(N * Math.min(1, Math.max(dt, 1 / 120) / 0.3)));
+  for (let j = 0; j < k; j++) {
+    const i = rr; rr = (rr + 1) % N; const n = npcs[i];
     let s = sim.stateAt(n, day, hour, false); const sel = game.observed?.id === n.id; const prev = game.states.get(n.id) ?? s;
     if (sel || Math.hypot(prev.x - fx, prev.z - fz) < 330 || Math.hypot(s.x - fx, s.z - fz) < 330) s = sim.stateAt(n, day, hour, true);
-    if (game.boarded === n.id || game.uw.evacuated.has(n.id)) s = { ...s, kind: 'absent' as const }; game.states.set(n.id, s); statesArr.push(s);
+    if (game.boarded === n.id || game.uw.evacuated.has(n.id)) s = { ...s, kind: 'absent' as const }; game.states.set(n.id, s); statesArr[i] = s;
   }
-  statesMs = performance.now() - t0;
+  statesMs = statesMs * 0.9 + (performance.now() - t0) * 0.1;
 }
 document.getElementById('reset')?.addEventListener('click', () => { Save.reset(); location.reload(); });
 
@@ -144,7 +147,7 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
 function frame(now: number) {
   const dt = Math.max(0, Math.min(0.05, (now - last) / 1000)); last = now; acc += dt;
   game.update(dt); const os = game.observed ? game.states.get(game.observed.id) : null; const fx = os ? os.x : game.pos.x, fz = os ? os.z : game.pos.z;
-  chunks.update(fx, fz, VIEW); signs.update(fx, fz); updateStates(now, fx, fz); placeCamera(dt);
+  chunks.update(fx, fz, VIEW); signs.update(fx, fz); updateStates(dt, fx, fz); placeCamera(dt);
   if (!game.interior.inside) npcRender.update(dt, statesArr, fx, fz, game.observed?.id ?? null, now, game.clock.scale, game.overrides()); if (game.observed && os) panel.update(game.observed, os, sim, game.clock.day, game.clock.hour, now, game.clock.scale); else if (panel.el.style.display !== 'none') panel.show(false);
   const lv = quality.update(dt); if (lv) applyQuality(lv);
   vrender.begin(); const flashOn = Math.floor(now / 280) % 2 ? 1 : 0.2;

@@ -55,8 +55,8 @@ export class InteriorManager {
   }
   private transition(fn: () => void) { this.fade = { t: 0.5, fn }; this.g.hud.veil(1); }
   private enter(e: Entry) {
-    this.entry = e; this.bi = e.bi; let c = this.cache.get(e.bi);
-    if (!c) { const d = this.index.dims(e.bi); const kind = kindFor(this.poi?.sous_type, d.area, rng(e.bi * 7919 + 13)); const layout = generate(kind, d.w * 0.95, d.d * 0.95, e.bi * 7919 + 1); c = { layout, scene: buildInterior(layout) }; this.cache.set(e.bi, c); if (this.cache.size > 6) { const k = this.cache.keys().next().value!; this.cache.delete(k); } }
+    this.entry = e; this.bi = e.bi; this.apt = !this.poi && this.g.uw.units(e.bi) > 1 ? this.g.uw.aptNo(e.bi) : -1; const ck = e.bi * 1000 + this.apt + 1; let c = this.cache.get(ck);
+    if (!c) { const d = this.index.dims(e.bi); const flat = this.apt >= 0; const kind = flat ? 'logement' : kindFor(this.poi?.sous_type, d.area, rng(e.bi * 7919 + 13)); const layout = flat ? generate(kind, 10 + (this.apt % 3), 8.5 + (this.apt % 2), e.bi * 7919 + 1 + this.apt * 31) : generate(kind, d.w * 0.95, d.d * 0.95, e.bi * 7919 + 1); c = { layout, scene: buildInterior(layout) }; this.cache.set(ck, c); if (this.cache.size > 6) { const k = this.cache.keys().next().value!; this.cache.delete(k); } }
     this.layout = c.layout; this.scene = c.scene; this.inside = true;
     this.mainScene.remove(this.g.player.root); this.scene.add(this.g.player.root); this.g.player.root.visible = true;
     this.g.player.pos.set(c.layout.spawn.x, 0, c.layout.spawn.z); this.g.player.heading = Math.PI; this.g.camYaw = Math.PI; this.g.camPitch = 0.3;
@@ -90,7 +90,7 @@ export class InteriorManager {
     if (key === 'F') { g.player.punch(); g.sfx('crash', 0.25); if (c.state === 'dort' || armed || Math.random() < 0.45) { c.state = 'ko'; if (c.av) { c.av.root.rotation.set(-Math.PI / 2, c.av.root.rotation.y, 0, 'YXZ'); c.av.root.position.y = c.av.root.position.y > 0.3 ? 0.62 : 0.18; } g.hud.toast(`${c.npc.prenom} est assommé${she ? 'e' : ''}.`, 2.5); } else { g.uw.hurt(8); c.callT = Math.min(c.callT, 3); g.hud.toast(`${c.npc.prenom} se débat et vous frappe !`, 2); } g.crime(20, 8); return; }
     if (c.state === 'dort') { if (c.robbed) return; if (Math.random() < 0.7) { this.rob(); } else { c.state = 'eveille'; c.callT = 5; if (c.av) { c.av.root.rotation.set(0, 0, 0); c.av.root.position.y = 0; } g.hud.toast(`${c.npc.prenom} se réveille en sursaut !`, 3); } return; }
     if (c.state === 'soumis') { if (!c.robbed) this.rob(); return; }
-    if (armed) { c.state = 'soumis'; c.callT = 1e9; g.crime(40, 8); g.crimeFile('homejacking', 1); g.hud.toast(`${c.npc.prenom} lève les mains et vous tend ce que vous demandez.`, 3); this.rob(); }
+    if (armed) { c.state = 'soumis'; c.callT = 1e9; c.av?.pose('handsup', 1); g.crime(40, 8); g.crimeFile('homejacking', 1); g.hud.toast(`${c.npc.prenom} lève les mains et vous tend ce que vous demandez.`, 3); this.rob(); }
     else { c.callT = Math.min(c.callT, 2); g.hud.toast(`${c.npc.prenom} refuse et crie au secours !`, 2.5); g.crime(15, 30); }
   }
   /** Hold-up : commerce ouvert, arme en main, à la caisse ou au guichet (jamais une école, jamais déjà braqué aujourd'hui). */
@@ -104,8 +104,8 @@ export class InteriorManager {
   /** Argent du foyer + clés de voiture : le véhicule du foyer vous attend devant (home-jacking). */
   private rob() {
     const c = this.occ!, g = this.g; c.robbed = true; const cash = Math.min(300, c.npc.argent); g.money += cash; g.sfx('coin');
-    const hasCar = g.uw.residentsOf(this.bi).some(n => n.hasCar) && !g.looted.has(`cles:${this.bi}:${g.clock.day}`); let msg = `+${cash} €`;
-    if (hasCar) { g.looted.add(`cles:${this.bi}:${g.clock.day}`); const e = this.entry!; const types = ['citadine', 'break', 'berline'] as const; const t = types[c.npc.seed % 3]; const paint = [0xe8e8e8, 0x1c1c1f, 0x8a1c1c, 0x1f3f78, 0xb9bcc0][c.npc.seed % 5];
+    const hasCar = g.uw.residentsOf(this.bi).some(n => n.hasCar) && !g.looted.has(`cles:${this.bi}/${this.apt}:${g.clock.day}`); let msg = `+${cash} €`;
+    if (hasCar) { g.looted.add(`cles:${this.bi}/${this.apt}:${g.clock.day}`); const e = this.entry!; const types = ['citadine', 'break', 'berline'] as const; const t = types[c.npc.seed % 3]; const paint = [0xe8e8e8, 0x1c1c1f, 0x8a1c1c, 0x1f3f78, 0xb9bcc0][c.npc.seed % 5];
       g.vehicles.add({ type: t, paint, hp: SPECS[t].hp, x: e.px + e.nx * 5, z: e.pz + e.nz * 5, h: Math.atan2(-e.nz, e.nx), speed: 0, kind: 'gare', mine: true, upgrade: 0, stun: 0 }); msg += ` et les clés de sa ${SPECS[t].nom.toLowerCase()} (garée devant)`; }
     g.hud.toast(`Vous prenez ${msg}.`, 4);
   }
@@ -127,7 +127,8 @@ export class InteriorManager {
     for (const s of this.layout!.spots) { if (s.kind !== 'sortie' && this.used(s)) continue; const d = Math.hypot(s.x - p.x, s.z - p.z); if (d < bd) { bd = d; best = s; } }
     return best;
   }
-  private key(s: Spot) { return `${this.bi}:${s.id}:${s.kind === 'prendre' ? this.g.clock.day : 0}`; }
+  apt = -1;
+  private key(s: Spot) { return `${this.bi}${this.apt >= 0 ? '/' + this.apt : ''}:${s.id}:${s.kind === 'prendre' ? this.g.clock.day : 0}`; }
   private used(s: Spot) { return ['fouiller', 'prendre', 'coffre', 'emporter'].includes(s.kind) && this.g.looted.has(this.key(s)); }
   camera(d = 2.6) {
     const g = this.g, l = this.layout!, y = g.camYaw, pch = Math.min(Math.max(g.camPitch, 0.25), 0.7);

@@ -39,7 +39,7 @@ export class Arson {
   ignite() {
     const g = this.g, t = this.target(); if (!t) return false; if (g.nearSchool()) { g.hud.toast('Pas ici : il y a une école à côté.', 2); return true; }
     if (!this.lighter) { g.hud.toast('Il vous faut un briquet.'); return true; }
-    if (t.fuel.kind === 'batiment') { if (this.essence <= 0) { g.hud.toast('Il faut de l\'essence (station-service, receleur).', 3); return true; } const bi = +t.fuel.key.slice(2); const o = g.uw.occ(bi); if (o && o.minors.length) { g.hud.toast('Des enfants sont à l\'intérieur : vous renoncez.', 3); return true; } this.essence--; }
+    if (t.fuel.kind === 'batiment') { if (this.essence <= 0) { g.hud.toast('Il faut de l\'essence (station-service, receleur).', 3); return true; } const bi = +t.fuel.key.slice(2); const o = g.uw.occAll(bi); if (o && o.minors.length) { g.hud.toast('Des enfants sont à l\'intérieur : vous renoncez.', 3); return true; } this.essence--; }
     const n = this.sim.ignite(t.fuel, 0.25); if (!n) return true; g.sfx('glass', 0.4); this.onBorn(n, true);
     g.crime(t.fuel.kind === 'batiment' ? 40 : t.fuel.key === 'v:own' ? 6 : 22, 25); if (t.fuel.key !== 'v:own') g.crimeFile(t.fuel.kind === 'batiment' ? 'incendie' : 'feu', 1);
     g.hud.toast(t.fuel.key === 'v:own' ? 'Votre voiture flambe : plus de traces dedans.' : t.fuel.kind === 'batiment' ? 'Le feu prend dans le bâtiment…' : 'La voiture s\'embrase.', 3); return true;
@@ -49,7 +49,7 @@ export class Arson {
     const g = this.g; if (this.dispatchT < 0 && !this.crew) this.dispatchT = 40;
     if (n.key === 'v:own') { g.enquete.burnCar(g.carId()); g.car.hp = 0; }
     else if (n.kind === 'voiture') { const v = g.vehicles.list.find(q => 'v:' + q.id === n.key); if (v) { v.hp = 0; v.stun = 1e6; if (v.kind === 'trafic') { g.traffic.release(v); v.kind = 'gare'; } } }
-    else { const bi = +n.key.slice(2); const l = g.uw.residentsOf(bi); const o = g.uw.occ(bi); if (o) for (const r of [...o.adults, ...o.minors]) g.uw.evacuated.set(r.id, g.clock.day); if (o && (o.adults.length || o.minors.length)) g.hud.toast(`Les habitants (famille ${l[0].nom}) évacuent : personne n'est blessé.`, 4); if (!byPlayer) g.hud.toast('Le feu gagne un bâtiment voisin !', 3); }
+    else { const bi = +n.key.slice(2); const l = g.uw.allResidents(bi); const o = g.uw.occAll(bi); if (o) for (const r of [...o.adults, ...o.minors]) g.uw.evacuated.set(r.id, g.clock.day); if (o && (o.adults.length || o.minors.length)) g.hud.toast(`Les habitants (${g.uw.units(bi) > 1 ? `${g.uw.units(bi)} foyers` : `famille ${l[0].nom}`}) évacuent : personne n'est blessé.`, 4); if (!byPlayer) g.hud.toast('Le feu gagne un bâtiment voisin !', 3); }
   }
   /** Coup de feu ou bagarre près des pompiers : ils se replient. */
   scare(x: number, z: number) { const c = this.crew; if (!c || c.arrive > 0 || Math.hypot(c.tx - x, c.tz - z) > 40 || c.retreat > 0) return; c.retreat = 25; this.g.crime(20, 40); this.g.hud.toast('Les pompiers se replient derrière leur camion : le feu gagne du terrain !', 4); }
@@ -66,7 +66,7 @@ export class Arson {
       const act = this.sim.active; const tgt = act.sort((a, b) => Math.hypot(a.x - c.tx, a.z - c.tz) - Math.hypot(b.x - c.tx, b.z - c.tz))[0];
       if (c.retreat > 0) c.retreat -= dt;
       c.men.forEach((m, i) => { if (!tgt) return; const a = Math.atan2(m.x - tgt.x, m.z - tgt.z) + (i - 1) * 0.5; const want = { x: tgt.x + Math.sin(a) * 9, z: tgt.z + Math.cos(a) * 9 }; const back = c.retreat > 0; const gx = back ? c.tx + (i - 1) * 1.2 : want.x, gz = back ? c.tz + 2 : want.z; const dx = gx - m.x, dz = gz - m.z, d = Math.hypot(dx, dz); if (d > 0.5) { m.x += dx / d * Math.min(d, 3.2 * dt); m.z += dz / d * Math.min(d, 3.2 * dt); }
-        if (m.av) { m.av.root.position.set(m.x, 0, m.z); m.av.root.rotation.y = d > 0.5 ? Math.atan2(dx, dz) : Math.atan2(tgt.x - m.x, tgt.z - m.z); m.av.set(d > 0.5 ? 'Run' : 'Idle', 3); m.av.update(dt); }
+        if (m.av) { m.av.root.position.set(m.x, 0, m.z); m.av.root.rotation.y = d > 0.5 ? Math.atan2(dx, dz) : Math.atan2(tgt.x - m.x, tgt.z - m.z); m.av.set(d > 0.5 ? 'Run' : 'Idle', 3); m.av.pose('hose', c.retreat <= 0 && d < 1.5 ? 1 : 0); m.av.update(dt); }
         if (!back && d < 1.5) { jets.push({ x: m.x, z: m.z, tx: tgt.x, tz: tgt.z }); for (const n of this.sim.water(tgt.x, tgt.z, 14, 0.05, dt)) this.burnt(n); } });
       if (!act.length && (c.leaveT -= dt) <= 0) this.dismiss();
     }

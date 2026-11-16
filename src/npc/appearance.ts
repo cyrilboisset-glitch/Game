@@ -1,7 +1,7 @@
 // Diversité des habitants : origines (noms + carnation + cheveux), morphologies (taille, corpulence), âge. Purement cosmétique : aucun effet sur le comportement.
 export type Origin = 'europe' | 'maghreb' | 'afrique' | 'europe_sud' | 'asie' | 'autre';
 export type HairStyle = 'courts' | 'rases' | 'longs' | 'queue' | 'boucles' | 'chauve';
-export interface Look { origin: Origin; skin: number; height: number; width: number; head: number; hairStyle: HairStyle; hairColor: number; stoop: number; skirt: boolean; female: boolean; }
+export interface Look { origin: Origin; skin: number; height: number; width: number; head: number; hairStyle: HairStyle; hairColor: number; stoop: number; skirt: boolean; female: boolean; face?: number; beard?: boolean; glasses?: boolean; shape?: { belly: number; chest: number; thigh: number; arm: number }; }
 
 /** Teintes de peau (multiplicateur de couleur appliqué à la texture de peau, 0 = la plus claire). */
 export const SKIN_TINTS = [0xffffff, 0xf2e2d6, 0xd9bda4, 0xa88060, 0x75543f, 0x4f382c];
@@ -38,5 +38,10 @@ export function makeLook(r: () => number, origin: Origin, genre: 'M' | 'F', age:
   else hairStyle = h < 0.12 ? 'chauve' : h < 0.35 ? 'rases' : (h < 0.5 && origin === 'afrique') ? 'boucles' : 'courts';
   let hairColor = HAIR_BY[origin][Math.floor(r() * HAIR_BY[origin].length)];
   if (elder) hairColor = r() < 0.85 ? (r() < 0.5 ? 0xd8d8d8 : 0x9a9a9a) : hairColor; else if (age > 50 && r() < 0.45) hairColor = 0x8a8a8a;
-  return { origin, skin, height, width, head, hairStyle, hairColor, stoop: elder ? 0.16 + r() * 0.12 : age > 55 ? 0.05 : 0, skirt: f && !kid && r() < 0.3, female: f };
+  const look: Look = { origin, skin, height, width, head, hairStyle, hairColor, stoop: elder ? 0.16 + r() * 0.12 : age > 55 ? 0.05 : 0, skirt: f && !kid && r() < 0.3, female: f };
+  // visage (variante de la banque), barbe, lunettes, corpulence détaillée (ventre, poitrine, cuisses, bras)
+  look.face = 1 + Math.floor(r() * 15); look.beard = !f && age >= 18 && r() < 0.32; look.glasses = age >= 10 && r() < (age > 50 ? 0.45 : 0.14);
+  const heavy = Math.max(0, width - 1), thin = Math.max(0, 1 - width);
+  look.shape = kid ? { belly: 1, chest: 1, thigh: 1, arm: 1 } : { belly: 1 + heavy * 2.2 - thin * 0.7 + (age > 45 && !f ? 0.07 : 0), chest: (f ? 1.0 : 1.03) + heavy * 0.55 - thin * 0.4, thigh: 1 + heavy * (f ? 1.3 : 0.9) - thin * 0.6, arm: 1 + heavy * 0.9 - thin * 0.5 };
+  return look;
 }

@@ -76,8 +76,17 @@ export class Game {
   walkersNear(x: number, z: number, r: number) { const out: { id: number; x: number; z: number; h: number; speed: number; minor: boolean }[] = []; for (const s of this.states.values()) { const c = this.npcCtl.get(s.id); if (c) { if (c.mode === 'ko' || Math.abs(c.x - x) > r || Math.abs(c.z - z) > r) continue; out.push({ id: s.id, x: c.x, z: c.z, h: c.h, speed: c.speed, minor: false }); continue; } if (s.kind !== 'marche' && s.kind !== 'dehors') continue; if (Math.abs(s.x - x) > r || Math.abs(s.z - z) > r) continue; out.push({ id: s.id, x: s.x, z: s.z, h: s.h, speed: s.speed, minor: this.npcs.get(s.id)?.minor ?? false }); } return out; }
   /** Renverse un habitant (adulte) : il reste au sol quelques secondes, décalé dans la direction du choc. */
   knock(id: number, dx: number, dz: number, h: number) { const s = this.states.get(id); if (s) this.npcCtl.ko(id, s.x + dx, s.z + dz, h, 20); }
+  /** Pistolet braqué : les passants adultes devant vous lèvent les mains, puis s'enfuient. */
+  private threaten() { if (this.mode !== 'foot' || this.weapon !== 'pistolet' || this.interior.inside) return; const p = this.player, fx = Math.sin(p.heading), fz = Math.cos(p.heading);
+    for (const w of this.walkersNear(p.pos.x, p.pos.z, 8)) { if (w.minor || this.npcCtl.get(w.id)) continue; const dx = w.x - p.pos.x, dz = w.z - p.pos.z, d = Math.hypot(dx, dz); if (d < 8 && (dx * fx + dz * fz) / (d || 1) > 0.75 && !this.coll.blocked(p.pos.x, p.pos.z, w.x, w.z)) this.npcCtl.freeze(w.id, w.x, w.z, Math.atan2(-dx, -dz), 4); } }
   /** Positions des habitants pris en main (pour le rendu). */
-  overrides() { const m = new Map<number, { x: number; z: number; h: number; lying: boolean; speed: number }>(); for (const c of this.npcCtl.map.values()) m.set(c.id, { x: c.x, z: c.z, h: c.h, lying: c.mode === 'ko', speed: c.speed }); return m; }
+  overrides() {
+    const m = new Map<number, { x: number; z: number; h: number; lying: boolean; speed: number; pose?: string; keep?: boolean }>();
+    for (const c of this.npcCtl.map.values()) m.set(c.id, { x: c.x, z: c.z, h: c.h, lying: c.mode === 'ko', speed: c.speed, pose: c.mode === 'combat' ? 'guard' : c.mode === 'fuite' ? 'cower' : c.mode === 'fige' ? 'handsup' : undefined });
+    // témoins au téléphone ; passants mains en l'air devant un pistolet braqué
+    for (const r of this.reports) { const e = m.get(r.witness); if (e) { if (!e.lying) e.pose = 'phone'; } else { const s = this.states.get(r.witness); if (s) m.set(r.witness, { x: s.x, z: s.z, h: s.h, lying: false, speed: s.speed, pose: 'phone', keep: true }); } }
+    return m;
+  }
   /** Témoins qui sont en train d'appeler (pour l'icône au-dessus de leur tête). */
   callers() { return this.reports.map(r => r.witness); }
   /** Collisions du piéton : bâtiments, mobilier/végétation, véhicules (renversé si l'un d'eux arrive vite), habitants. */
@@ -229,7 +238,7 @@ export class Game {
       if (inp.hit('Escape', 'quit')) this.stopObserving(); this.clock.tick(dt); this.hud.veil(0); this.hud.tick(dt); this.hud.prompt('Échap : quitter l\'observation'); return;
     }
     this.interior.tick(dt);
-    this.t += dt; this.attackCd -= dt; this.processReports(); this.uw.update(dt); this.arson.update(dt); this.heists.update(dt); this.kid.update();
+    this.t += dt; this.attackCd -= dt; this.processReports(); this.uw.update(dt); this.threaten(); this.arson.update(dt); this.heists.update(dt); this.kid.update();
     { const r = this.npcCtl.update(dt, this.player.pos.x, this.player.pos.z, this.props ? { resolve: (q: { x: number; z: number }, rr: number) => { this.props!.resolve(q, rr); this.coll.resolve(q, rr); } } : undefined);
       if (r.dmgToPlayer && this.mode === 'foot' && !this.interior.inside) { this.uw.hurt(r.dmgToPlayer); this.sfx('crash', 0.2); if (this.fx) this.fx.shake = Math.min(1, this.fx.shake + 0.3); }
       for (const id of r.woke) { const c = this.npcCtl.get(id); if (c && !this.reports.some(q => q.witness === id)) this.reports.push({ witness: id, due: this.t + 6, v: 12, desc: { outfit: this.outfitId(), vehicle: null, face: !this.hooded } }); } }
@@ -252,6 +261,7 @@ export class Game {
   private updateSleep(dt: number) { this.clock.scale = 12; this.car.update(dt, { throttle: 0, brake: 0, steer: 0, handbrake: true }); }
   private updateFoot(dt: number) {
     const inp = this.input, p = this.player;
+    p.picking = !!this.uw.pick; p.carrying = this.uw.carried > 6;
     if (this.downT > 0) { this.downT -= dt; p.update(dt, 0, 0, this.camYaw, false, 1); } else p.update(dt, inp.x, inp.y, this.camYaw, inp.run && !this.crouch && this.uw.carried < 12, this.needs.speedFactor * this.uw.speedFactor * (this.crouch ? 0.45 : 1));
     this.coll.resolve(p.pos as any, p.radius); this.footCollide();
     p.root.rotation.order = 'YXZ'; p.root.rotation.x = this.downT > 0 ? -Math.PI / 2 * Math.min(1, (2.5 - this.downT) * 6, this.downT * 3) : 0;
@@ -259,6 +269,7 @@ export class Game {
     const dCar = Math.hypot(this.car.pos.x - p.pos.x, this.car.pos.z - p.pos.z);
     if (this.uw.menuOpen()) { if (inp.hit('KeyN', 'next')) this.uw.action('N'); if (inp.hit('KeyB', 'buy')) this.uw.action('B'); }
     if (inp.hit('KeyG', 'fire')) this.arson.ignite();
+    if (!this.uw.menuOpen() && !this.interior.inside) { const e = this.interior.index.find(p.pos.x, p.pos.z); if (e && !this.interior.index.poi(e.bi) && this.uw.units(e.bi) > 1 && inp.hit('KeyN', 'next')) this.uw.nextApt(e.bi); }
     { const gs = this.nearestPoi(25); if (gs && gs.sous_type === 'gas' && inp.hit('KeyB', 'buy')) { if (this.money < 15) this.hud.toast('Il vous faut 15 €.'); else { this.money -= 15; this.arson.essence++; this.sfx('coin'); this.hud.toast('Jerrican d\'essence acheté (−15 €).'); } } }
     if (inp.hit('KeyI', 'dossier')) this.hud.toast(this.dossierText(), 7);
     if (inp.hit('KeyE', 'action') && !this.uw.action('E') && !this.heists.action() && !this.kid.action()) {

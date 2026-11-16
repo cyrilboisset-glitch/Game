@@ -5,6 +5,13 @@ export interface Outfit { hoodie: number; jeans: number; shoes: number; hair: nu
 export const PLAYER_OUTFIT: Outfit = { hoodie: 0x3d4f6b, jeans: 0x2f4a7a, shoes: 0xe8e8e8, hair: 0x2a1d14, hood: true };
 
 const fabrics: Record<string, THREE.CanvasTexture> = {};
+let strands: THREE.CanvasTexture | undefined;
+/** Texture de mèches (multipliée par la couleur des cheveux). */
+function hairStrands() {
+  if (strands) return strands; const c = document.createElement('canvas'); c.width = c.height = 128; const g = c.getContext('2d')!; g.fillStyle = '#c8c8c8'; g.fillRect(0, 0, 128, 128);
+  for (let i = 0; i < 700; i++) { const x = Math.random() * 128, y = Math.random() * 128, v = 140 + Math.random() * 115; g.strokeStyle = `rgb(${v},${v},${v})`; g.lineWidth = 0.6 + Math.random(); g.beginPath(); g.moveTo(x, y); g.lineTo(x + (Math.random() - 0.5) * 6, y + 10 + Math.random() * 14); g.stroke(); }
+  strands = new THREE.CanvasTexture(c); strands.wrapS = strands.wrapT = THREE.RepeatWrapping; strands.repeat.set(3, 2); strands.colorSpace = THREE.SRGBColorSpace; return strands;
+}
 /** Texture de tissu neutre (multipliée par la couleur du matériau) : tricot (pull) ou sergé (jean). */
 function fabric(denim: boolean) {
   const k = denim ? 'd' : 'p'; if (fabrics[k]) return fabrics[k];
@@ -38,6 +45,7 @@ export function dress(root: THREE.Object3D, o: Outfit, look?: Look) {
     else if (me.name === 'Wolf3D_Outfit_Bottom') { mt.map = fabric(true); mt.normalMap = null; mt.color.set(o.jeans); mt.roughness = 0.85; mt.metalness = 0; }
     else if (me.name === 'Wolf3D_Outfit_Footwear') { mt.map = fabric(false); mt.normalMap = null; mt.color.set(o.shoes); mt.roughness = 0.7; }
     else if (look && (me.name === 'Wolf3D_Head' || me.name === 'Wolf3D_Body')) mt.color.set(SKIN_TINTS[look.skin]);
+    else if (me.name === 'Wolf3D_Beard') { me.visible = !!look?.beard && !o.hoodUp; mt.color.set(look?.hairColor ?? 0x2a1d14); mt.roughness = 0.95; }
     mt.needsUpdate = true;
   });
   root.updateMatrixWorld(true);
@@ -47,16 +55,19 @@ export function dress(root: THREE.Object3D, o: Outfit, look?: Look) {
     const m = new THREE.Mesh(geom, mat); m.position.copy(bn.worldToLocal(wp)); m.scale.copy(sc).multiplyScalar(1 / ws); m.castShadow = true; bn.add(m); return m;
   };
   const style = look?.hairStyle ?? 'courts';
+  const hairTex = hairStrands();
   if (o.hoodUp) attach('Head', new THREE.SphereGeometry(0.135, 18, 12, 0, Math.PI * 2, 0, Math.PI * 0.62), new THREE.MeshStandardMaterial({ color: o.hoodie, roughness: 0.9, map: fabric(false), side: THREE.DoubleSide }), new THREE.Vector3(0, 0.1, -0.03), new THREE.Vector3(1.05, 1.08, 1.12));
   else if (o.hair !== null && style !== 'chauve') {
-    const hm = new THREE.MeshStandardMaterial({ color: o.hair, roughness: 0.95 }); const one = new THREE.Vector3(1, 1, 1);
+    const hm = new THREE.MeshStandardMaterial({ color: o.hair, roughness: 0.8, map: hairTex, bumpMap: hairTex, bumpScale: 0.6 }); const one = new THREE.Vector3(1, 1, 1);
     if (style === 'boucles') attach('Head', new THREE.SphereGeometry(0.138, 18, 14), hm, new THREE.Vector3(0, 0.13, -0.012), new THREE.Vector3(1, 0.88, 1));
     else {
-      attach('Head', new THREE.SphereGeometry(style === 'rases' ? 0.104 : 0.108, 20, 12, 0, Math.PI * 2, 0, Math.PI * (style === 'rases' ? 0.5 : 0.56)), hm, new THREE.Vector3(0, 0.125, -0.005), one);
+      const cap = attach('Head', new THREE.SphereGeometry(style === 'rases' ? 0.107 : 0.11, 24, 14, 0, Math.PI * 2, 0, Math.PI * (style === 'rases' ? 0.56 : 0.6)), hm, new THREE.Vector3(0, 0.126, -0.012), new THREE.Vector3(1.02, style === 'rases' ? 0.96 : 1.02, 1.08)); cap.rotation.x = -0.38;   // calotte inclinée : front dégagé, nuque couverte
       if (style === 'longs') attach('Head', new THREE.CapsuleGeometry(0.075, 0.2, 4, 10), hm, new THREE.Vector3(0, 0.02, -0.07), new THREE.Vector3(1.25, 1, 0.65));
       if (style === 'queue') attach('Head', new THREE.CapsuleGeometry(0.03, 0.16, 4, 8), hm, new THREE.Vector3(0, 0.07, -0.13), one);
     }
   }
+  if (look?.glasses) { const gm = new THREE.MeshStandardMaterial({ color: 0x18181a, roughness: 0.4, metalness: 0.3 }); const lens = new THREE.TorusGeometry(0.022, 0.0035, 6, 16); const g = new THREE.Group(); for (const sx of [-0.033, 0.033]) { const l = new THREE.Mesh(lens, gm); l.position.x = sx; g.add(l); } const br = new THREE.Mesh(new THREE.BoxGeometry(0.022, 0.004, 0.004), gm); g.add(br);
+    const hb = bone('Head'); const eye = bones.find(x => x.name === 'LeftEye'); const wp = eye ? eye.getWorldPosition(new THREE.Vector3()) : hb.getWorldPosition(new THREE.Vector3()).add(new THREE.Vector3(0.03, 0.07, 0.09)); wp.x = hb.getWorldPosition(new THREE.Vector3()).x; wp.z += 0.035; const ws = hb.getWorldScale(new THREE.Vector3()).x || 1; g.position.copy(hb.worldToLocal(wp)); g.scale.setScalar(1 / ws); hb.add(g); }
   if (look?.skirt) { const sm = new THREE.MeshStandardMaterial({ color: o.jeans, roughness: 0.9, side: THREE.DoubleSide, map: fabric(false) }); attach('Hips', new THREE.CylinderGeometry(0.2, 0.3, 0.46, 16, 1, true), sm, new THREE.Vector3(0, -0.2, 0), new THREE.Vector3(1, 1, 1)); }
   if (o.hood) attach('Neck', new THREE.SphereGeometry(0.115, 16, 10), new THREE.MeshStandardMaterial({ color: o.hoodie, roughness: 0.9, map: fabric(false) }), new THREE.Vector3(0, 0.005, -0.085), new THREE.Vector3(1.15, 0.55, 0.7));
 }

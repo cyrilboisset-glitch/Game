@@ -104,3 +104,18 @@ Scénario de vérification : `node tools/collisions.cjs <dossier>`. Limite : les
 - **Prison** : arrêté avec un mandat, des dossiers solides ou en flagrant délit grave, on passe des jours à la maison d'arrêt (hors de la commune) : le temps avance, armes et butin saisis, amende, planque parfois perquisitionnée. Sinon, simple amende.
 - **Limites** : les complices ne sont pas représentés à l'écran ; les bâtiments incendiés ne noircissent pas une fois éteints ; le fourgon est un utilitaire gris à l'arrêt ; l'otage n'est pas visible pendant le trajet.
 - Scénario de vérification : `node tools/wave3.cjs <dossier>`.
+
+## Vague 4 : animations d'action, visages, corpulences, population réelle
+- **Population** : 7 350 habitants, la population municipale de Pontcharra (INSEE, 2023), soit 3 063 foyers. Les maisons accueillent un foyer, les petits collectifs un logement pour 90 m² au sol, les grands immeubles du centre trois niveaux de logements de 75 m². Résultat : 263 immeubles habités par plusieurs foyers. Devant un immeuble, N choisit l'appartement visé ; le repérage, le crochetage et le cambriolage portent sur cet appartement, avec un intérieur plus petit qu'une maison.
+- **Animations d'action** : des poses superposées aux animations de marche et de course, en orientant les os vers des directions voulues.
+  - Joueur : coup de poing, armer puis abattre un objet, bras tendus pour tirer, accroupi (bassin abaissé, genoux pliés), crochetage à genoux mains sur la serrure, butin lourd porté devant soi.
+  - Habitants : témoin qui téléphone, garde levée en bagarre, bras protégeant la tête en fuite, mains en l'air devant un pistolet braqué (puis fuite), occupant qui lève les mains, pompiers à la lance.
+- **Visages** : 16 variantes de visage obtenues en déformant le maillage de la tête (largeur, mâchoire, menton, nez, pommettes, arcade, longueur, lèvres). S'y ajoutent des moustaches (un tiers des hommes adultes), des lunettes (près de la moitié des plus de 50 ans) et des cheveux à texture de mèches, avec la calotte inclinée vers l'arrière.
+- **Corpulences** : ventre, poitrine, cuisses et bras réglés os par os, chaque os enfant compensant l'échelle de son parent. Les personnes fortes ont du ventre vers l'avant et des cuisses plus larges, au lieu d'être simplement étirées en largeur.
+- **Performances** : le calcul des états des 7 350 habitants est réparti sur les images (tous recalculés en 0,3 s), au lieu d'un bloc d'environ 13 ms toutes les 0,3 s.
+- **Limites** :
+  - Les poses sont procédurales et figées : un vrai coup de poing animé image par image demanderait des fichiers d'animation supplémentaires.
+  - Une seule base de modèle, et la barbe est la moustache du modèle d'origine.
+  - Les cheveux restent des volumes simples.
+  - Les habitants ne s'assoient pas.
+- Scénario de vérification : `node tools/wave4.cjs <dossier>` ; labos `tools/lab/poses.html` et `tools/lab/faces.html`.

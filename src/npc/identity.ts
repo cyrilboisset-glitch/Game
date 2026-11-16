@@ -2,7 +2,7 @@ import { rng } from '../interiors/generator';
 import type { Outfit } from '../player/outfit';
 import { makeLook, pickOrigin, NAMES, type Look } from './appearance';
 
-export interface Place { x: number; z: number; nom: string; bi?: number; kind: 'maison' | 'travail' | 'ecole' | 'commerce' | 'resto' | 'parc' | 'hors'; }
+export interface Place { x: number; z: number; nom: string; bi?: number; apt?: number; units?: number; kind: 'maison' | 'travail' | 'ecole' | 'commerce' | 'resto' | 'parc' | 'hors'; }
 export type Metier = 'boulanger' | 'vendeur' | 'serveur' | 'coiffeur' | 'pharmacien' | 'banquier' | 'enseignant' | 'agent_mairie' | 'mecanicien' | 'employe_bureau' | 'ouvrier' | 'chauffeur' | 'retraite' | 'eleve' | 'sans_emploi';
 export interface Npc {
   id: number; prenom: string; nom: string; age: number; genre: 'M' | 'F'; metier: Metier; metierLabel: string; adresse: string; seed: number; minor: boolean; hasCar: boolean; outfit: Outfit; look: Look;

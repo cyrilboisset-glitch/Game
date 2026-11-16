@@ -23,7 +23,7 @@ export class Underworld {
   owned = new Set<number>(); scouted = new Map<number, string>(); evacuated = new Map<number, number>();
   fence: Den | null = null; dens: Den[] = []; caches: Cache[] = []; inDen = false; safeSleep = false;
   pick: { e: Entry; t: number; x: number; z: number } | null = null; sel = 0;
-  private residents = new Map<number, Npc[]>(); private listenT = 0; private listenBi = -1; private shotCd = 0; private volleyT = 0; private evacT = new Map<number, number>();
+  residents = new Map<number, Npc[]>(); private households = new Map<number, Npc[][]>(); private aptSel = new Map<number, number>(); private listenT = 0; private listenBi = -1; private shotCd = 0; private volleyT = 0; private evacT = new Map<number, number>();
   private cacheMeshes: THREE.Object3D[] = []; tracer?: THREE.Line; private tracerT = 0;
   constructor(private g: Game) {}
 
@@ -38,7 +38,8 @@ export class Underworld {
       const p = ok.splice(Math.floor(r() * ok.length), 1)[0]; const a = r() * Math.PI * 2; const q = { x: p.x + Math.cos(a) * 3.5, z: p.z + Math.sin(a) * 3.5 }; this.g.coll.resolve(q, 0.6);
       const what = CACHE_KINDS[i]; this.caches.push({ x: q.x, z: q.z, what, n: what === 'argent' ? 60 + Math.floor(r() * 220) : what === 'munitions' ? 12 : 1, desc: HIDING[Math.floor(r() * HIDING.length)] });
     }
-    for (const n of npcs) if (n.home.bi !== undefined) { const l = this.residents.get(n.home.bi); if (l) l.push(n); else this.residents.set(n.home.bi, [n]); }
+    const tmp = new Map<number, Map<number, Npc[]>>(); for (const n of npcs) if (n.home.bi !== undefined) { const m = tmp.get(n.home.bi) ?? new Map<number, Npc[]>(); tmp.set(n.home.bi, m); const k = n.home.apt ?? 0; const l = m.get(k); if (l) l.push(n); else m.set(k, [n]); }
+    for (const [bi, m] of tmp) { const hh = [...m.entries()].sort((a, b) => a[0] - b[0]).map(e => e[1]); this.households.set(bi, hh); this.residents.set(bi, hh[0]); }
   }
   /** Repères 3D discrets : sacs des caches, lanternes du receleur et des planques. */
   buildMarkers(scene: THREE.Scene) {
@@ -54,9 +55,18 @@ export class Underworld {
   resolve(p: { x: number; z: number }, r: number) { let d = 0; for (const b of this.huts) { if (Math.abs(b.x - p.x) > 8 || Math.abs(b.z - p.z) > 8) continue; const k = circleVsBox(p.x, p.z, r, b.x, b.z, b.h, b.hl, b.hw); if (k) { p.x += k.x; p.z += k.z; d = Math.max(d, k.d); } } return d; }
   roadDist = (x: number, z: number) => { let m = 99; for (const r of this.g.world.roads) { const q = r.p[0]; if (Math.abs(q[0] - x) > 400 || Math.abs(q[1] - z) > 400) continue; for (let i = 0; i < r.p.length - 1; i++) { const [ax, az] = r.p[i], [bx, bz] = r.p[i + 1]; const dx = bx - ax, dz = bz - az, l2 = dx * dx + dz * dz || 1; const t = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / l2)); m = Math.min(m, Math.hypot(x - ax - dx * t, z - az - dz * t)); } } return m; };
   residentsOf(bi: number) { return this.residents.get(bi) ?? []; }
+  /** Immeubles : nombre de logements habités, appartement visé, passage au suivant (N à la porte). */
+  units(bi: number) { return this.households.get(bi)?.length ?? 0; }
+  apt(bi: number) { return this.aptSel.get(bi) ?? 0; }
+  aptNo(bi: number) { return this.residents.get(bi)?.[0]?.home.apt ?? 0; }
+  nextApt(bi: number) { const hh = this.households.get(bi); if (!hh || hh.length < 2) return false; const k = (this.apt(bi) + 1) % hh.length; this.aptSel.set(bi, k); this.residents.set(bi, hh[k]); return true; }
+  allResidents(bi: number) { return (this.households.get(bi) ?? []).flat(); }
+  /** Occupants de tout le bâtiment (incendie). */
+  occAll(bi: number): Occupancy | null { const l = this.allResidents(bi); if (!l.length) return null; const g = this.g; return occupancy(l, n => g.sim!.stateAt(n, g.clock.day, g.clock.hour, false)); }
+  private skey(bi: number) { return bi * 1000 + this.aptNo(bi); }
   occ(bi: number): Occupancy | null { const l = this.residents.get(bi); if (!l) return null; const g = this.g; return occupancy(l, n => g.sim!.stateAt(n, g.clock.day, g.clock.hour, false)); }
   /** Texte de porte d'un logement : nom du foyer, indice visible, notes de repérage. */
-  doorInfo(bi: number) { const l = this.residents.get(bi); if (!l) return ''; const o = this.occ(bi)!; const note = this.scouted.get(bi); return `Famille ${l[0].nom} · ${streetCue(o, this.g.clock.hour)}${note ? ' · ' + note : ' · accroupi : écouter'}`; }
+  doorInfo(bi: number) { const l = this.residents.get(bi); if (!l) return ''; const o = this.occ(bi)!; const note = this.scouted.get(this.skey(bi)); const u = this.units(bi); return `${u > 1 ? `Immeuble (${u} foyers) · appt ${this.aptNo(bi) + 1} : ` : ''}Famille ${l[0].nom} · ${streetCue(o, this.g.clock.hour)}${note ? ' · ' + note : ' · accroupi : écouter'}${u > 1 ? ' · N : autre appartement' : ''}`; }
   get carried() { return kgOf(this.bag); }
   get speedFactor() { return loadFactor(this.carried) * (this.g.needs.s.sante < 30 ? 0.75 : 1); }
   /** Ajoute un objet au sac (false si trop lourd). */
@@ -74,7 +84,7 @@ export class Underworld {
     const g = this.g, p = g.player; if (this.shotCd > 0) return; if (this.ammo <= 0) { g.hud.toast('Plus de munitions : coup de crosse.', 1.5); return false; }
     const list = g.walkersNear(p.pos.x, p.pos.z, PISTOL.range + 2); const a = aimShot(p.pos.x, p.pos.z, p.heading, list, (x0, z0, x1, z1) => g.coll.blocked(x0, z0, x1, z1));
     if (a.child) { g.hud.toast('Un enfant est dans la ligne de mire : vous ne tirez pas.', 2.5); return true; }
-    this.shotCd = PISTOL.cd; this.ammo--; g.sfx('shot'); p.punch(); if (g.fx) g.fx.shake = Math.min(1, g.fx.shake + 0.25);
+    this.shotCd = PISTOL.cd; this.ammo--; g.sfx('shot'); p.aim(); if (g.fx) g.fx.shake = Math.min(1, g.fx.shake + 0.25);
     const fx = Math.sin(p.heading), fz = Math.cos(p.heading); const ex = a.target ? a.target.x : p.pos.x + fx * PISTOL.range, ez = a.target ? a.target.z : p.pos.z + fz * PISTOL.range;
     if (this.tracer) { const pos = this.tracer.geometry.attributes.position as THREE.BufferAttribute; pos.setXYZ(0, p.pos.x + fx * 0.6, 1.35, p.pos.z + fz * 0.6); pos.setXYZ(1, ex, 1.2, ez); pos.needsUpdate = true; this.tracer.visible = true; this.tracerT = 0.06; }
     if (a.target) { const n = g.npcs.get(a.target.id)!; g.npcCtl.ko(n.id, a.target.x, a.target.z, p.heading, 1e6); this.evacuated.set(n.id, g.clock.day); this.evacT.set(n.id, 45); g.hud.toast(`${n.prenom} est touché${n.genre === 'F' ? 'e' : ''} et s'effondre. Les secours vont l'évacuer.`, 3); }
@@ -166,7 +176,7 @@ export class Underworld {
   }
   private scout(bi: number) {
     const g = this.g, l = this.residents.get(bi)!; const o = this.occ(bi)!; const f = nextEmpty(l, (n, d, h) => g.sim!.stateAt(n, d, h, false), g.clock.day, g.clock.hour);
-    const note = `${listenReport(o)}${f ? ' · ' + f.text : ''}`; this.scouted.set(bi, note); g.hud.toast(`Repérage (famille ${l[0].nom}) : ${note}.`, 5);
+    const note = `${listenReport(o)}${f ? ' · ' + f.text : ''}`; this.scouted.set(this.skey(bi), note); g.hud.toast(`Repérage (famille ${l[0].nom}) : ${note}.`, 5);
   }
   save() { return { bag: this.bag, trunk: this.trunk, stash: this.stash, ammo: this.ammo, tools: [...this.tools], kits: this.kits, bleeding: this.bleeding, owned: [...this.owned], scouted: [...this.scouted] }; }
   load(s: any) { if (!s) return; this.bag = s.bag ?? []; this.trunk = s.trunk ?? []; this.stash = s.stash ?? []; this.ammo = s.ammo ?? 0; this.tools = new Set(s.tools ?? []); this.kits = s.kits ?? 0; this.bleeding = !!s.bleeding; this.owned = new Set(s.owned ?? []); this.scouted = new Map(s.scouted ?? []); this.cacheMeshes.forEach((m, i) => { m.visible = !this.g.looted.has('cache:' + i); }); }
