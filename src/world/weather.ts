@@ -32,13 +32,13 @@ export class WeatherFx {
   private base: { m: THREE.MeshStandardMaterial; r: number; c: THREE.Color; e: number }[];
   constructor(scene: THREE.Scene, private mats: Materials) {
     this.rp = new Float32Array(this.N * 6); const rg = new THREE.BufferGeometry(); rg.setAttribute('position', new THREE.BufferAttribute(this.rp, 3));
-    this.rain = new THREE.LineSegments(rg, new THREE.LineBasicMaterial({ color: 0xaab8c8, transparent: true, opacity: 0.45, depthWrite: false })); this.rain.frustumCulled = false; scene.add(this.rain);
+    this.rain = new THREE.LineSegments(rg, new THREE.LineBasicMaterial({ color: 0xd0dae6, transparent: true, opacity: 0.62, depthWrite: false })); this.rain.frustumCulled = false; scene.add(this.rain);
     this.sp = new Float32Array(this.M * 3); const sg = new THREE.BufferGeometry(); sg.setAttribute('position', new THREE.BufferAttribute(this.sp, 3));
-    this.snow = new THREE.Points(sg, new THREE.PointsMaterial({ color: 0xffffff, size: 0.09, transparent: true, opacity: 0.9, depthWrite: false })); this.snow.frustumCulled = false; scene.add(this.snow);
+    this.snow = new THREE.Points(sg, new THREE.PointsMaterial({ color: 0xffffff, size: 0.16, transparent: true, opacity: 0.9, depthWrite: false })); this.snow.frustumCulled = false; scene.add(this.snow);
     for (let i = 0; i < this.N; i++) this.seedDrop(i, 0, 0, true); for (let i = 0; i < this.M; i++) this.seedFlake(i, 0, 0, true);
     this.base = [mats.asphalt, mats.asphaltMarked, mats.pavement, mats.marks, mats.gravel].map(m => ({ m: m as THREE.MeshStandardMaterial, r: (m as THREE.MeshStandardMaterial).roughness, c: (m as THREE.MeshStandardMaterial).color.clone(), e: (m as THREE.MeshStandardMaterial).envMapIntensity }));
   }
-  private seedDrop(i: number, cx: number, cz: number, any: boolean) { const x = cx + (Math.random() - 0.5) * 50, z = cz + (Math.random() - 0.5) * 50, y = any ? Math.random() * 22 : 20 + Math.random() * 4; const o = i * 6; this.rp[o] = x; this.rp[o + 1] = y; this.rp[o + 2] = z; this.rp[o + 3] = x + 0.04; this.rp[o + 4] = y - 0.55; this.rp[o + 5] = z + 0.02; }
+  private seedDrop(i: number, cx: number, cz: number, any: boolean) { const x = cx + (Math.random() - 0.5) * 50, z = cz + (Math.random() - 0.5) * 50, y = any ? Math.random() * 22 : 20 + Math.random() * 4; const o = i * 6; this.rp[o] = x; this.rp[o + 1] = y; this.rp[o + 2] = z; this.rp[o + 3] = x + 0.06; this.rp[o + 4] = y - 0.95; this.rp[o + 5] = z + 0.02; }
   private seedFlake(i: number, cx: number, cz: number, any: boolean) { const o = i * 3; this.sp[o] = cx + (Math.random() - 0.5) * 44; this.sp[o + 1] = any ? Math.random() * 16 : 15 + Math.random() * 3; this.sp[o + 2] = cz + (Math.random() - 0.5) * 44; }
   /** À appeler après la mise à jour du cycle jour/nuit (assombrit le soleil, épaissit le brouillard). */
   update(dt: number, day: number, hour: number, cam: THREE.Vector3, sun: THREE.DirectionalLight, hemi: THREE.HemisphereLight, fog: THREE.FogExp2, indoor: boolean) {
@@ -48,7 +48,7 @@ export class WeatherFx {
     for (const b of this.base) { b.m.roughness = THREE.MathUtils.lerp(b.r, 0.18, this.wet * 0.85); b.m.color.copy(b.c).multiplyScalar(1 - this.wet * 0.35).lerp(new THREE.Color(0xf4f6f8), this.snowCover * 0.7); b.m.envMapIntensity = b.e * (1 + this.wet * 2.5); }
     const T = TINT[this.season]; (this.mats.leaves as THREE.MeshStandardMaterial).color.set(T.leaves); const gc = new THREE.Color(T.grass).lerp(new THREE.Color(0xffffff), this.snowCover * 0.85); (this.mats.greens as THREE.MeshStandardMaterial).color.copy(gc); (this.mats.ground as THREE.MeshStandardMaterial).color.copy(gc);
     // ciel couvert, brouillard
-    sun.intensity *= 1 - w.cloud * 0.7; hemi.intensity *= 1 - w.cloud * 0.25; fog.density *= 1 + w.fog * 7 + w.rain * 1.5 + w.snow * 2.5; fog.color.lerp(new THREE.Color(0x9aa3ab).multiplyScalar(0.4 + sun.intensity * 0.18), Math.max(w.cloud * 0.5, w.fog * 0.8));
+    sun.intensity *= 1 - w.cloud * 0.7; hemi.intensity *= 1 - w.cloud * 0.25; fog.density *= 1 + w.fog * 14 + w.rain * 2 + w.snow * 3.5; fog.color.lerp(new THREE.Color(0xb4bcc4).multiplyScalar(0.45 + Math.min(1, sun.intensity) * 0.5), Math.max(w.cloud * 0.5, w.fog * 0.9));
     // précipitations autour de la caméra
     this.rain.visible = w.rain > 0.02 && !indoor; this.snow.visible = w.snow > 0.02 && !indoor;
     if (this.rain.visible) { const n = Math.floor(this.N * w.rain); for (let i = 0; i < this.N; i++) { const o = i * 6; if (i >= n) { this.rp[o + 1] = this.rp[o + 4] = -50; continue; } const fall = 18 * dt; this.rp[o + 1] -= fall; this.rp[o + 4] -= fall; if (this.rp[o + 4] < 0 || Math.abs(this.rp[o] - cam.x) > 26 || Math.abs(this.rp[o + 2] - cam.z) > 26) this.seedDrop(i, cam.x, cam.z, this.rp[o + 1] < -40); } (this.rain.geometry.attributes.position as THREE.BufferAttribute).needsUpdate = true; this.rain.position.y = 0; }

@@ -9,7 +9,7 @@ export interface Obstacle { x: number; z: number; h: number; speed: number; L: n
 /** Circulation : voitures qui suivent le graphe routier (sens uniques, limites, distance de sécurité, une voiture à la fois par carrefour). Elles n'existent qu'autour du joueur. */
 export class Traffic {
   cars: TCar[] = []; private claims = new Map<number, { owner: number; until: number }>(); private clock = 0; private r: () => number; stats = { spawns: 0, attente: 0 };
-  constructor(private graph: RoadGraph, private world: VehicleWorld, public count = 40, private patrols = 2, seed = 5) { let a = seed; this.r = () => (a = (a * 16807) % 2147483647) / 2147483647; }
+  constructor(private graph: RoadGraph, private world: VehicleWorld, public count = 40, public patrols = 2, seed = 5) { let a = seed; this.r = () => (a = (a * 16807) % 2147483647) / 2147483647; }
 
   private spawn(fx: number, fz: number, patrol: boolean): boolean {
     for (let tries = 0; tries < 6; tries++) {

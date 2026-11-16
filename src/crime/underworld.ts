@@ -70,7 +70,7 @@ export class Underworld {
   private skey(bi: number) { return bi * 1000 + this.aptNo(bi); }
   occ(bi: number): Occupancy | null { const l = this.residents.get(bi); if (!l) return null; const g = this.g; return occupancy(l, n => g.sim!.stateAt(n, g.clock.day, g.clock.hour, false)); }
   /** Texte de porte d'un logement : nom du foyer, indice visible, notes de repérage. */
-  doorInfo(bi: number) { const l = this.residents.get(bi); if (!l) return ''; const o = this.occ(bi)!; const note = this.scouted.get(this.skey(bi)); const u = this.units(bi); return `${u > 1 ? `Immeuble (${u} foyers) · appt ${this.aptNo(bi) + 1} : ` : ''}Famille ${l[0].nom} · ${streetCue(o, this.g.clock.hour)}${note ? ' · ' + note : ' · accroupi : écouter'}${u > 1 ? ' · N : autre appartement' : ''}`; }
+  doorInfo(bi: number) { const l = this.residents.get(bi); if (!l) return ''; const o = this.occ(bi)!; const note = this.scouted.get(this.skey(bi)); const u = this.units(bi); const alarm = this.g.memory.alarmed(`${bi}/${u > 1 ? this.aptNo(bi) : 0}`, this.g.clock.day) ? ' · 🔔 alarme posée' : ''; return `${u > 1 ? `Immeuble (${u} foyers) · appt ${this.aptNo(bi) + 1} : ` : ''}Famille ${l[0].nom}${alarm} · ${streetCue(o, this.g.clock.hour)}${note ? ' · ' + note : ' · accroupi : écouter'}${u > 1 ? ' · N : autre appartement' : ''}`; }
   get carried() { return kgOf(this.bag); }
   get speedFactor() { return loadFactor(this.carried) * (this.g.needs.s.sante < 30 ? 0.75 : 1); }
   /** Ajoute un objet au sac (false si trop lourd). */

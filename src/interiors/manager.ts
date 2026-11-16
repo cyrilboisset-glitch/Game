@@ -43,15 +43,18 @@ export class InteriorManager {
     const o = this.g.uw.occ(e.bi); if (o && o.minors.length) { this.g.hud.toast('Des enfants sont à la maison : vous renoncez.', 3); return true; }
     if (st === 'verrouille' && this.g.uw.tools.has('crochet')) { this.g.uw.startPick(e); return true; }
     this.forced = st === 'verrouille'; this.poi = poi;
-    if (this.forced) { this.g.crime(20, 25); const alarm = poi ? Math.random() < 0.35 : Math.random() < 0.15; if (alarm) { this.g.crime(20, 70); this.g.sfx('alarm'); this.g.hud.toast('Porte forcée… ALARME !'); } else { this.g.sfx('glass'); this.g.hud.toast('Vous forcez la porte.'); } }
+    if (this.forced) { this.g.crime(20, 25); const hk = this.homeKey(e.bi, poi); const alarm = hk && this.g.memory.alarmed(hk, this.g.clock.day) ? Math.random() < 0.8 : poi ? Math.random() < 0.35 : Math.random() < 0.15; if (hk) this.g.memory.burgled(hk, this.g.clock.day); if (alarm) { this.g.crime(20, 70); this.g.sfx('alarm'); this.g.hud.toast('Porte forcée… ALARME !'); } else { this.g.sfx('glass'); this.g.hud.toast('Vous forcez la porte.'); } }
     this.noisy = this.forced; this.transition(() => this.enter(e)); return true;
   }
-  private noisy = false;
+  private noisy = false; refused = false;
+  /** Clé d'un logement (bâtiment + appartement) pour la mémoire du voisinage ; null pour un commerce. */
+  homeKey(bi: number, poi?: Poi) { return poi ? null : `${bi}/${this.g.uw.units(bi) > 1 ? this.g.uw.aptNo(bi) : 0}`; }
   /** Entrée après crochetage : discrète, alarme rare. */
   enterQuiet(e: Entry) {
     const poi = this.index.poi(e.bi); const o = this.g.uw.occ(e.bi); if (o && o.minors.length) { this.g.hud.toast('Des enfants sont à la maison : vous renoncez.', 3); return; }
     this.forced = true; this.noisy = false; this.poi = poi; this.g.crime(12, 3);
-    if (Math.random() < (poi ? 0.2 : 0.06) * alarmK(this.g.skills.level('crochetage'))) { this.g.crime(20, 70); this.g.sfx('alarm'); this.g.hud.toast('La serrure cède… mais une ALARME se déclenche !'); } else { this.g.sfx('door'); this.g.hud.toast('La serrure cède sans bruit.'); }
+    const hk = this.homeKey(e.bi, poi); const alarmed = !!hk && this.g.memory.alarmed(hk, this.g.clock.day); if (hk) this.g.memory.burgled(hk, this.g.clock.day);
+    if (Math.random() < (alarmed ? 0.6 : poi ? 0.2 : 0.06) * alarmK(this.g.skills.level('crochetage'))) { this.g.crime(20, 70); this.g.sfx('alarm'); this.g.hud.toast('La serrure cède… mais une ALARME se déclenche !'); } else { this.g.sfx('door'); this.g.hud.toast('La serrure cède sans bruit.'); }
     this.transition(() => this.enter(e));
   }
   private transition(fn: () => void) { this.fade = { t: 0.5, fn }; this.g.hud.veil(1); }
@@ -61,7 +64,9 @@ export class InteriorManager {
     this.layout = c.layout; this.scene = c.scene; this.inside = true;
     this.mainScene.remove(this.g.player.root); this.scene.add(this.g.player.root); this.g.player.root.visible = true;
     this.g.player.pos.set(c.layout.spawn.x, 0, c.layout.spawn.z); this.g.player.heading = Math.PI; this.g.camYaw = Math.PI; this.g.camPitch = 0.3;
-    this.g.hud.toast(`${this.poi?.nom ?? 'Intérieur'} · lieu généré (pas une reproduction réelle)`, 4); this.refresh(); this.spawnOccupant(e);
+    this.g.hud.toast(`${this.poi?.nom ?? 'Intérieur'} · lieu généré (pas une reproduction réelle)`, 4); this.refused = false;
+    // un commerçant déjà braqué reconnaît votre visage : il refuse de vous servir et appelle
+    if (this.poi && !this.forced && this.g.memory.recognizes(this.poi.id, this.g.clock.day, this.g.hooded, this.g.outfitId(), Math.random())) { this.refused = true; this.g.sfx('voice', 1); this.g.report(-7000 - e.bi, 5, 25, { outfit: this.g.outfitId(), vehicle: null, face: true }); this.g.hud.toast('« C\'est lui ! C\'est lui qui m\'a braqué ! » — le commerçant vous reconnaît et décroche son téléphone.', 5); } this.refresh(); this.spawnOccupant(e);
   }
   /** Cache les objets déjà emportés et les repères des meubles déjà fouillés. */
   private refresh() { this.scene?.traverse(o => { const b = o.userData.bulky as string | undefined, sp = o.userData.spot as string | undefined; const s = this.layout!.spots.find(q => q.id === (b ?? sp)); if (s && (b || sp)) o.visible = !this.used(s); }); }
@@ -97,7 +102,7 @@ export class InteriorManager {
   /** Hold-up : commerce ouvert, arme en main, à la caisse ou au guichet (jamais une école, jamais déjà braqué aujourd'hui). */
   private holdupable(s: Spot) { return !this.forced && this.g.weapon !== 'poings' && (s.kind === 'acheter' || s.kind === 'coffre') && this.layout!.kind !== 'ecole' && !this.g.looted.has(`holdup:${this.bi}:${this.g.clock.day}`); }
   private holdup(s: Spot) {
-    const g = this.g, bank = this.layout!.kind === 'banque'; g.looted.add(`holdup:${this.bi}:${g.clock.day}`); g.player.punch();
+    const g = this.g, bank = this.layout!.kind === 'banque'; if (this.poi && !g.hooded) g.memory.saw(this.poi.id, g.clock.day, g.outfitId()); g.looted.add(`holdup:${this.bi}:${g.clock.day}`); g.player.punch();
     const m = bank ? rr(1800, 4200) : this.layout!.kind === 'supermarche' ? rr(300, 900) : rr(120, 450); g.money += m; g.sfx('alarm');
     g.heat.value = Math.max(g.heat.value, bank ? 62 : 42); g.crimeFile('holdup', bank ? 1.3 : 1); g.repUp(bank ? 6 : 3); g.report(-1 - this.bi, 4, 10, { outfit: g.hooded && g.heists.cagoule ? null : g.outfitId(), vehicle: null, face: !g.hooded });
     g.hud.toast(`« La caisse, vite ! » — ${s.kind === 'coffre' ? 'le guichetier' : 'le personnel'} vous tend ${m} €. L'alarme silencieuse est déclenchée.`, 5); void s;
@@ -144,7 +149,7 @@ export class InteriorManager {
     const once = () => { g.looted.add(key); };
     switch (s.kind) {
       case 'sortie': this.exit(); break;
-      case 'acheter':
+      case 'acheter': if (open && this.refused) return hud.toast('« Sortez d\'ici ! On ne vous servira pas. »', 3);
         if (!open) { if (g.looted.has(key)) return; once(); const m = rr(20, 80); g.money += m; g.crime(10); hud.toast(`Vous vidant la caisse : +${m} €`); break; }
         if (l.kind === 'coiffeur') { if (g.money < 15) return hud.toast('Il vous faut 15 €.'); g.money -= 15; g.heat.value = Math.max(0, g.heat.value - 30); hud.toast('Nouveau look : on vous reconnaîtra moins (−15 €).'); }
         else if (l.kind === 'pharmacie') { if (g.money < 5) return hud.toast('Il vous faut 5 €.'); g.money -= 5; g.needs.s.sante = Math.min(100, g.needs.s.sante + 20); g.uw.bleeding = false; g.uw.kits++; hud.toast('Soins et une trousse de secours (−5 €).'); }

@@ -144,3 +144,33 @@ Scénario de vérification : `node tools/collisions.cjs <dossier>`. Limite : les
 - **Voitures du trafic et garées** : une fois percutées, elles apparaissent cabossées du côté touché (avant, arrière ou flanc).
 - **Caméra en voiture** : glisser le doigt (ou la souris) fait tourner la caméra autour du véhicule ; elle revient derrière quand on roule.
 - Vérification : `node tools/crash.cjs <dossier>` et le labo `tools/lab/crash.html`.
+
+## Animations enregistrées, voitures vivantes, téléphone, progression, ambiance, mémoire du voisinage
+- **Animations** : bibliothèque d'animations universelle de Quaternius (CC0), réduite à 29 animations et recalée sur nos personnages.
+  - Joueur : enchaînement direct, crochet puis coup de pied ; coup de batte ; pistolet (repos, visée, tir) ; accroupi au repos et en marche ; à genoux pour crocheter ; coups reçus ; chute et relevé ; sprint.
+  - Espace (ou bouton « Sauter ») pour sauter une haie ou escalader un muret ; E pour s'asseoir sur un banc ; ouverture de la portière avant de monter ; conduite mains sur le volant.
+  - Habitants : chute tenue au sol, relevé, coups et impacts, course.
+  - La version gratuite de la bibliothèque n'a pas de coup de pied : il est fait par une pose calculée.
+- **Voitures** :
+  - accidents : tonneaux (la voiture retombe sur les roues ou finit sur le toit), capot et portière arrachés qui volent puis retombent, éclats de vitres ;
+  - conducteurs : ils klaxonnent et protestent quand on les percute, relèvent la plaque et appellent la gendarmerie après un choc franc, et klaxonnent quand on les bloque ;
+  - radio inventée générée en direct (4 stations, M ou bouton « Radio »).
+- **Téléphone** (📱 ou P, jeu en pause) :
+  - carte plein écran déplaçable et zoomable avec tous les repères ; toucher la carte pose un repère suivi par la balise ;
+  - messages du milieu : tuyaux, bonus du receleur, alertes, coin tranquille ;
+  - onglet « Moi » (réputation, compétences, planques, bilan), dossiers d'enquête, contacts, accès aux missions, 3 emplacements de sauvegarde.
+- **Progression** :
+  - réputation de 0 à 100, avec des rangs de « Inconnu » à « Caïd de la vallée » ;
+  - compétences sur 5 niveaux : crochetage, conduite, discrétion, endurance ;
+  - planques équipables : lit, coffre-fort, garage fermé ;
+  - **grand coup** final : salle des coffres d'une société fictive, réputation 50, toute l'équipe, crochetage niveau 3.
+- **Ambiance** :
+  - saisons de 7 jours (feuillage, herbe, neige l'hiver) et météo par tranches de 6 h ;
+  - routes mouillées et brillantes avec moins d'adhérence ; brouillard du matin dans la vallée ;
+  - la pluie et le brouillard gênent les témoins ;
+  - sons : pluie, rumeur de la circulation, chiens, cloches de l'église de 8 h à 21 h, voix des passants bousculés.
+- **Mémoire du voisinage** :
+  - une maison cambriolée fait poser une alarme dès le lendemain (indiquée à la porte) ;
+  - un commerçant braqué reconnaît votre visage pendant 10 jours (capuche ou cagoule pour l'éviter) : il refuse de vous servir et appelle ;
+  - les quartiers où vous frappez deviennent méfiants : témoins plus attentifs, patrouilles plus nombreuses et plus vigilantes. La méfiance retombe de moitié chaque jour.
+- Vérifications : `tools/anims-game.cjs`, `tools/cars-alive.cjs`, `tools/weather.cjs`, labos `tools/lab/anims.html` et `tools/lab/crash.html`.
