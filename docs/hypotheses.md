@@ -21,3 +21,7 @@
 - **Saisons et météo** : saisons de 7 jours de jeu (la partie commence en automne) ; probabilités de pluie et de brouillard par saison choisies pour le jeu, pas issues de relevés météo de Pontcharra.
 - **Cloches** : sonnent à l'heure depuis les lieux de culte OSM de la commune, de 8 h à 21 h (horaire de jeu, pas l'horaire réel des sonneries).
 - **Radio et messages** : stations, expéditeurs et lieux entièrement inventés.
+
+- **Couleurs réelles (novembre 2026)** : toits d'après la photo aérienne IGN (4 529 bâtiments ; voile mauve corrigé : tuiles ramenées à la terre cuite, autres toits en gris neutre) ; façades d'après 3 513 panoramas Panoramax (964 bâtiments ; murs lus entre 2,3 m et le haut du mur, médiane pondérée, photos récentes privilégiées, exposition ramenée à un enduit clair, teintes bleutées neutralisées). Les autres bâtiments gardent une teinte tirée au hasard.
+- **Clôtures** : posées sur les limites cadastrales des seules parcelles de 120 à 4 000 m² contenant un logement (1 312 parcelles) ; nature (haie, muret + grille, grillage) tirée au hasard, de façon stable ; portail de 3,5 m au milieu du côté rue. Les haies IGN remplacent la clôture qu'elles longent.
+- **Largeur des routes** : la largeur de chaussée de la BD TOPO n'est pas utilisée (appariement avec OSM peu fiable : trottoirs et pistes cyclables confondus avec la chaussée).

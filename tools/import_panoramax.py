@@ -7,7 +7,7 @@ et le haut du mur. On écarte la végétation, le ciel, les fenêtres et les omb
 pondérée, de toutes les photos qui la voient. Résultat : « wc » (hex) dans public/data/pontcharra.json.
 Les photos ne sont pas conservées ; seules les médianes par photo sont mises en cache (data/src/pano/cache.json).
 Aucune personne ni plaque n'est exploitée : seuls des pixels de mur sont lus."""
-import sys, os, json, math, io, urllib.request
+import sys, os, json, math, io, colorsys, urllib.request
 from concurrent.futures import ThreadPoolExecutor
 import numpy as np
 from PIL import Image
@@ -110,9 +110,11 @@ def main(index):
     gain = 200 / max(1, float(np.median(lums)))
     for b in w["builds"]: b.pop("wc", None)
     for i, (r, g, b) in res.items():
-        r, g, b = (min(255, v * gain) for v in (r, g, b)); m = (r + g + b) / 3
-        r, g, b = (max(0, min(255, m + (v - m) * 1.35)) for v in (r, g, b))   # lumière souvent voilée : on resature un peu
-        w["builds"][i]["wc"] = "%02x%02x%02x" % (int(r), int(g), int(b))
+        hh, ll, ss = colorsys.rgb_to_hls(*(min(1, v * gain / 255) for v in (r, g, b)))
+        ll = min(0.86, max(0.35, ll))   # ni mur « blanc pur » surexposé, ni mur noir à contre-jour
+        ss = min(0.06, ss) if 0.42 < hh < 0.78 else min(0.42, ss * 1.15)   # teinte bleutée = reflet du ciel ou temps couvert : gris neutre
+        r, g, b = colorsys.hls_to_rgb(hh, ll, ss)
+        w["builds"][i]["wc"] = "%02x%02x%02x" % (int(r * 255), int(g * 255), int(b * 255))
     json.dump(w, open("public/data/pontcharra.json", "w", encoding="utf-8"), ensure_ascii=False, separators=(",", ":"))
     print(f"Façades : {len(res)} bâtiments colorés d'après {len(cache)} panoramas (gain d'exposition {gain:.2f})")
 
