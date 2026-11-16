@@ -174,3 +174,6 @@ Scénario de vérification : `node tools/collisions.cjs <dossier>`. Limite : les
   - un commerçant braqué reconnaît votre visage pendant 10 jours (capuche ou cagoule pour l'éviter) : il refuse de vous servir et appelle ;
   - les quartiers où vous frappez deviennent méfiants : témoins plus attentifs, patrouilles plus nombreuses et plus vigilantes. La méfiance retombe de moitié chaque jour.
 - Vérifications : `tools/anims-game.cjs`, `tools/cars-alive.cjs`, `tools/weather.cjs`, labos `tools/lab/anims.html` et `tools/lab/crash.html`.
+
+## Fichier unique (à envoyer ou copier)
+`npm run single` fabrique `release/Pontcharra.html` (≈ 8 Mo) : le jeu complet dans un seul fichier (code, carte, données, personnages, animations), qui s'ouvre directement dans Chrome (double-clic, pièce jointe, clé USB), sans serveur ni connexion. La sauvegarde reste dans le navigateur qui l'a ouvert.
