@@ -119,3 +119,14 @@ Scénario de vérification : `node tools/collisions.cjs <dossier>`. Limite : les
   - Les cheveux restent des volumes simples.
   - Les habitants ne s'assoient pas.
 - Scénario de vérification : `node tools/wave4.cjs <dossier>` ; labos `tools/lab/poses.html` et `tools/lab/faces.html`.
+
+## Commandes tactiles (refonte)
+- Joystick à gauche ; à droite, quatre gros boutons ronds sous le pouce :
+  - **A** (bleu) : l'action du moment, avec son nom (Voler, Entrer, Crocheter, Parler, Monter, Descendre, Fouiller, Valider, Réveil…), grisé quand il n'y a rien à faire ;
+  - **B** (rouge) : Frapper, Tirer (pistolet chargé), Braquer, Assommer ; caché en voiture ;
+  - **C** : Courir (à pied) / Frein (en voiture) ;
+  - **D** : Accroupi (à pied) / Klaxon (en voiture).
+- Une rangée de **boutons contextuels** n'apparaît que lorsqu'ils servent : Feu, Suivant, Valider/Acheter, Garage, Phares (de nuit), Manger ou Boire (faim ou soif), Soin (blessé, avec une trousse), Besoin, Dormir, Capuche (si vous êtes recherché), Objet (si vous avez plusieurs armes).
+- Le **menu ☰** regroupe le reste : manger, boire, soin, dormir, besoin, capuche, objet, feu, missions, dossiers, phares, klaxon.
+- Vibration légère à chaque appui ; en paysage, le pavé est réduit.
+- Captures de contrôle : `node tools/touch.cjs <dossier>`.

@@ -25,6 +25,7 @@ import { Game } from './game';
 import { Input } from './ui/input';
 import { Hud } from './ui/hud';
 import { Minimap } from './ui/minimap';
+import { touchContext } from './ui/touchctx';
 import * as Save from './core/save';
 import { RoadGraph } from './roads/graph';
 import { buildPopulation, loadAddresses } from './npc/population';
@@ -146,7 +147,9 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
 
 function frame(now: number) {
   const dt = Math.max(0, Math.min(0.05, (now - last) / 1000)); last = now; acc += dt;
-  game.update(dt); const os = game.observed ? game.states.get(game.observed.id) : null; const fx = os ? os.x : game.pos.x, fz = os ? os.z : game.pos.z;
+  game.update(dt);
+  if (input.touch) { const N = game.needs.s, U = game.uw; input.setContext(touchContext(document.getElementById('prompt')!.textContent ?? '', { mode: game.mode, inside: game.interior.inside, sleeping: game.sleeping, observing: !!game.observed, weapon: game.weapon, ammo: U.ammo, weapons: game.weapons.size, night: game.night,
+    faim: N.faim, soif: N.soif, vessie: N.vessie, energie: N.energie, sante: N.sante, food: game.inv.nourriture, water: game.inv.eau, kits: U.kits, bleeding: U.bleeding, wanted: game.heat.value > 0, hooded: game.hooded })); } const os = game.observed ? game.states.get(game.observed.id) : null; const fx = os ? os.x : game.pos.x, fz = os ? os.z : game.pos.z;
   chunks.update(fx, fz, VIEW); signs.update(fx, fz); updateStates(dt, fx, fz); placeCamera(dt);
   if (!game.interior.inside) npcRender.update(dt, statesArr, fx, fz, game.observed?.id ?? null, now, game.clock.scale, game.overrides()); if (game.observed && os) panel.update(game.observed, os, sim, game.clock.day, game.clock.hour, now, game.clock.scale); else if (panel.el.style.display !== 'none') panel.show(false);
   const lv = quality.update(dt); if (lv) applyQuality(lv);
