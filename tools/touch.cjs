@@ -5,7 +5,7 @@ const { chromium } = require('playwright'); const out = process.argv[2] || '.';
   for (const [w, h, tag] of [[412, 915, 'portrait'], [915, 412, 'paysage']]) {
     const p = await b.newPage({ viewport: { width: w, height: h }, hasTouch: true, isMobile: true, deviceScaleFactor: 2 }); p.on('pageerror', e => console.log('PAGEERR', e.message));
     await p.goto('http://127.0.0.1:5199/?t=14&freeze&s=3&fresh&touch&r=160'); await p.waitForFunction('window.__ready', null, { timeout: 150000 });
-    const ev = js => p.evaluate(js); const frames = () => p.waitForTimeout(1200);
+    const ev = js => p.evaluate(js); const frames = () => p.waitForTimeout(3500);
     const btns = () => ev(`JSON.stringify({A:document.querySelector('#bA').textContent+(document.querySelector('#bA').classList.contains('off')?' (grisé)':''),B:getComputedStyle(document.querySelector('#bB')).display==='none'?null:document.querySelector('#bB').textContent,C:document.querySelector('#bC').textContent,D:document.querySelector('#bD').textContent,chips:[...document.querySelectorAll('#chips .chip')].map(c=>c.textContent)})`);
     await ev(`(()=>{const G=window.__game.game;G.clock.scale=0;const v=G.vehicles.list.find(v=>v.kind==='gare'&&!v.mine);G.player.pos.set(v.x+2.6,0,v.z);G.camYaw=Math.atan2(v.x-G.player.pos.x,v.z-G.player.pos.z);window.__game.sync();})()`); await frames();
     console.log(tag, 'près d\'une voiture garée :', await btns()); await p.screenshot({ path: `${out}/tactile-${tag}-voiture.png` });
