@@ -7,7 +7,10 @@ ou en Lambert-93 (EPSG:2154) : la projection est reconnue toute seule.
 Pour chaque bâtiment OSM, on cherche le bâtiment IGN qui le contient et on récupère :
   h  = hauteur (m, sol → gouttière)      l  = nombre d'étages
   u  = usage (r résidentiel, c commerce/services, i industriel, a agricole, x annexe, s sportif, g religieux)
-  lg = nombre de logements
+  lg = nombre de logements (réparti au prorata de la surface si plusieurs bâtiments OSM tombent dans le même bâtiment IGN)
+  t  = hauteur du toit (faîtage − gouttière ; ≈ 0 = toit plat)
+  mw = matériau des murs (1 pierre, 2 meulière, 3 béton, 4 brique, 5 aggloméré, 6 bois)
+  mt = matériau du toit (1 tuiles, 2 ardoises, 3 zinc/alu, 4 béton)
 Les bâtiments IGN absents d'OpenStreetMap sont ajoutés (sauf avec --sans-ajout)."""
 import sys, json, math
 
@@ -42,6 +45,19 @@ def to_local(pt):
 def num(v):
     try: return float(v)
     except Exception: return 0.0
+
+def mat(code):
+    """Codes à 2 chiffres des fichiers fonciers (ex. « 35 » = béton + aggloméré) : on garde le matériau principal."""
+    for ch in str(code or ""):
+        if ch in "123456": return int(ch)
+    return 0
+
+def enrich(b, g):
+    if g["h"] > 0: b["h"] = g["h"]
+    if g["l"] > 0: b["l"] = g["l"]
+    for k in ("u", "mw", "mt"):
+        if g[k]: b[k] = g[k]
+    if g["t"] >= 0: b["t"] = g["t"]
 
 def area(p):
     s = 0.0
@@ -90,10 +106,12 @@ def load_ign(paths):
                 if len(pts) < 4: continue
                 c = centroid(list(pts)); lat, lon = ll[0]
                 if not (BBOX[0] <= lat <= BBOX[2] and BBOX[1] <= lon <= BBOX[3]): continue
+                tmin, tmax = num(pr.get("altitude_minimale_toit")), num(pr.get("altitude_maximale_toit"))
                 u = USAGE.get(str(pr.get("usage_1") or "").strip().lower(), "")
                 out.append({"p": [list(q) for q in pts], "c": c, "a": abs(area(pts)), "h": round(num(pr.get("hauteur")), 1),
                             "l": int(num(pr.get("nombre_d_etages"))), "u": u, "lg": int(num(pr.get("nombre_de_logements"))),
-                            "leger": str(pr.get("construction_legere")).lower() in ("true", "oui", "1")})
+                            "leger": str(pr.get("construction_legere")).lower() in ("true", "oui", "1"),
+                            "t": round(tmax - tmin, 1) if tmin > 0 and tmax >= tmin else -1, "mw": mat(pr.get("materiaux_des_murs")), "mt": mat(pr.get("materiaux_de_la_toiture"))})
     return out
 
 def main(args):
@@ -105,18 +123,34 @@ def main(args):
     src = "public/data/pontcharra.json"; w = json.load(open(src, encoding="utf-8"))
     grid = Grid()
     for k, b in enumerate(ign): grid.add(k, b["p"])
-    used, matched = set(), 0
-    for b in w["builds"]:
+    used, groups = set(), {}
+    for bi, b in enumerate(w["builds"]):
         c = centroid(b["p"]); best = None
         for k in grid.near(c):
             g = ign[k]
             if inside(c, g["p"]) and (best is None or g["a"] < ign[best]["a"]): best = k
+        if best is None:   # forme en L ou léger décalage : on accepte un bâtiment IGN dont le centre tombe dans le contour OSM
+            for k in grid.near(c):
+                g = ign[k]
+                if inside(g["c"], b["p"]) and (best is None or g["a"] > ign[best]["a"]): best = k
+        if best is None:   # dernier recours : centres à moins de 4 m et surfaces comparables
+            ba = abs(area(b["p"]))
+            for k in grid.near(c):
+                g = ign[k]; d = math.hypot(g["c"][0] - c[0], g["c"][1] - c[1])
+                if d < 4 and 0.5 < g["a"] / max(1, ba) < 2 and (best is None or d < math.hypot(ign[best]["c"][0] - c[0], ign[best]["c"][1] - c[1])): best = k
         if best is None: continue
-        g = ign[best]; used.add(best); matched += 1
-        if g["h"] > 0: b["h"] = g["h"]
-        if g["l"] > 0: b["l"] = g["l"]
-        if g["u"]: b["u"] = g["u"]
-        if g["u"] == "r" or g["lg"] > 0: b["lg"] = g["lg"]
+        used.add(best); groups.setdefault(best, []).append(bi); enrich(b, ign[best])
+    matched = sum(len(v) for v in groups.values())
+    # logements : un immeuble IGN découpé en plusieurs bâtiments OSM → répartition au prorata de la surface (plus grand reste)
+    for k, bis in groups.items():
+        g = ign[k]
+        if g["lg"] <= 0:
+            for i in bis: w["builds"][i]["lg"] = 0   # connu de l'IGN mais sans logement (garage, hangar, commerce…)
+            continue
+        ar = [abs(area(w["builds"][i]["p"])) for i in bis]; tot = sum(ar) or 1
+        raw = [g["lg"] * a / tot for a in ar]; got = [int(x) for x in raw]
+        for j in sorted(range(len(bis)), key=lambda j: raw[j] - got[j], reverse=True)[:g["lg"] - sum(got)]: got[j] += 1
+        for i, n in zip(bis, got): w["builds"][i]["lg"] = n
     print(f"OSM : {matched}/{len(w['builds'])} bâtiments enrichis (hauteur, étages, usage, logements)")
     if add:
         osm = Grid()
@@ -126,9 +160,8 @@ def main(args):
             if k in used or g["a"] < 12 or g["leger"]: continue
             if any(inside(g["c"], w["builds"][j]["p"]) for j in osm.near(g["c"])): continue
             if any(inside(centroid(w["builds"][j]["p"]), g["p"]) for j in osm.near(g["c"])): continue
-            nb = {"l": g["l"], "h": g["h"], "n": "", "p": g["p"]}
-            if g["u"]: nb["u"] = g["u"]
-            if g["u"] == "r" or g["lg"] > 0: nb["lg"] = g["lg"]
+            nb = {"l": 0, "h": 0, "n": "", "p": g["p"]}; enrich(nb, g)
+            nb["lg"] = max(0, g["lg"])
             w["builds"].append(nb); added += 1
         print(f"Ajout : {added} bâtiments présents à l'IGN mais absents d'OSM")
     json.dump(w, open(src, "w", encoding="utf-8"), ensure_ascii=False, separators=(",", ":"))

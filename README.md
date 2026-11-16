@@ -197,4 +197,6 @@ Scénario de vérification : `node tools/collisions.cjs <dossier>`. Limite : les
 
 ## Données IGN (plus réaliste)
 
-Tutoriel : [docs/ign.md](docs/ign.md). Une fois les fichiers de la BD TOPO placés dans `data/`, lancer `python3 -I tools/import_ign.py data/ign-*.json`.
+Tutoriel : [docs/ign.md](docs/ign.md). Fichiers BD TOPO dans `data/ign-*.json`, import : `git checkout public/data/pontcharra.json && python3 -I tools/import_ign.py data/ign-*.json` (repartir du fichier OSM d'origine avant de relancer).
+
+Résultat actuel : 4 565 bâtiments enrichis (vraie hauteur, étages, usage, toit plat ou en pente avec sa hauteur réelle, murs en pierre, meulière, béton, brique ou bois, toits en tuiles, ardoise ou zinc), 271 bâtiments ajoutés, 3 237 logements réels qui répartissent les 7 350 habitants.

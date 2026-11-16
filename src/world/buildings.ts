@@ -6,6 +6,9 @@ import { rnd } from './textures';
 
 const PLASTER = ['#f1e8d6', '#e6d3b0', '#d9bf98', '#efe0c4', '#c9c4bb', '#e8cfc0', '#d8d9cf', '#f3efe6', '#d6b79a', '#c7b79d'].map(c => new THREE.Color(c));
 const FLOOR_H = 3.0, BAY = 3.8;
+/** Couleurs par matériau IGN : murs (1 pierre, 2 meulière, 3 béton, 5 aggloméré enduit, 6 bois) et toits (2 ardoise, 3 zinc, 4 béton ; 1 tuiles = teinte par défaut). */
+const WALL_MAT: Record<number, THREE.Color> = { 1: new THREE.Color('#c8bba5'), 2: new THREE.Color('#cdb08a'), 3: new THREE.Color('#c9c6bf'), 6: new THREE.Color('#9a7655') };
+const ROOF_MAT: Record<number, THREE.Color> = { 2: new THREE.Color('#5d6168'), 3: new THREE.Color('#9aa0a6'), 4: new THREE.Color('#a7a49d') };
 // cases de l'atlas (origine en bas à gauche, coordonnées v inversées par rapport au canvas)
 const CELL = { win: [0, 1], shut: [1, 1], lit: [2, 1], plain: [3, 1], door: [0, 0], shop: [1, 0] } as const;
 let BRICK = 0;   // 1 = façade en brique (moitié basse de l'atlas)
@@ -78,7 +81,7 @@ function gableTri(B: BuildBuilders, a: number[], b: number[], m: number[], out: 
   B.wall.tri(i[0], i[1], i[2]);
 }
 
-function gable(B: BuildBuilders, p: Pt[], h: number, roofCol: THREE.Color, wallCol: THREE.Color) {
+function gable(B: BuildBuilders, p: Pt[], h: number, roofCol: THREE.Color, wallCol: THREE.Color, ridge = -1) {
   const o = obb(p); const c = Math.cos(o.ang), s = Math.sin(o.ang);
   const w = o.maxX - o.minX, d = o.maxY - o.minY;
   const along = w >= d; // faîtage le long du grand côté
@@ -86,7 +89,7 @@ function gable(B: BuildBuilders, p: Pt[], h: number, roofCol: THREE.Color, wallC
   const W = (u: number, v: number): Pt => [u * c - v * s, u * s + v * c];  // inverse de la rotation de obb()
   const P = (u: number, v: number, y: number) => { const q = W(u, v); return [q[0], y, q[1]]; };
   const u0 = o.minX - ov, u1 = o.maxX + ov, v0 = o.minY - ov, v1 = o.maxY + ov;
-  const rh = Math.min(w, d) * 0.32 + 0.6;
+  const rh = ridge > 0 ? Math.max(0.8, Math.min(ridge, Math.min(w, d) * 0.7)) : Math.min(w, d) * 0.32 + 0.6;   // hauteur IGN du toit si connue
   const um = (u0 + u1) / 2, vm = (v0 + v1) / 2;
   const dirU = W(1, 0), dirV = W(0, 1);
   if (B.trim) { const along2 = w >= d; const cu = along2 ? um + (u1 - u0) * 0.22 * (rnd() < 0.5 ? -1 : 1) : um + (u1 - u0) * 0.18, cv = along2 ? vm + (v1 - v0) * 0.18 : vm + (v1 - v0) * 0.22 * (rnd() < 0.5 ? -1 : 1); const q = W(cu, cv); const cc = wallCol.clone().multiplyScalar(0.85); orientedBox(B.trim, q[0], q[1], dirV[0], dirV[1], 0.55, 0.55, rh + 0.9, h + rh * 0.35, cc); orientedBox(B.trim, q[0], q[1], dirV[0], dirV[1], 0.68, 0.68, 0.12, h + rh * 1.25 + 0.55, new THREE.Color(0.25, 0.24, 0.23)); }
@@ -124,15 +127,22 @@ export function addBuilding(B: BuildBuilders, b: Build, idx: number) {
   // orientation : normales sortantes (le plan x/z est vu de dessus avec z vers le sud ⇒ orientation inversée)
   if (a > 0) p = p.slice().reverse();
   const work = b.u === 'i' || b.u === 'a' || b.u === 'c' || b.u === 's';   // usage IGN : hangars, ateliers, grandes surfaces, gymnases
-  const floors = b.l > 0 ? b.l : (b.h > 0 ? Math.max(1, Math.round(b.h / FLOOR_H)) : b.u === 'x' ? 1 : work ? 1 : (Math.abs(a) > 600 ? 2 : (rnd() < 0.55 ? 2 : 3)));
-  const h = b.h > 0 ? b.h : floors * FLOOR_H;
-  BRICK = (idx * 2654435761 >>> 0) % 100 < 18 ? 1 : 0; const col = BRICK ? new THREE.Color(1, 0.96, 0.92).multiplyScalar(0.82 + rnd() * 0.22) : PLASTER[idx % PLASTER.length].clone().multiplyScalar(0.92 + rnd() * 0.12);
+  // étages : nombre IGN, mais cohérent avec la hauteur (un pavillon de 7 m avec combles n'a pas une seule rangée de fenêtres collée en bas)
+  const floors = b.h > 0 ? (b.l > 0 ? Math.max(Math.max(1, Math.round(b.h / 3.4)), Math.min(b.l, Math.max(1, Math.ceil(b.h / 2.5))))
+    : Math.max(1, Math.round(b.h / FLOOR_H))) : b.l > 0 ? b.l : b.u === 'x' ? 1 : work ? 1 : (Math.abs(a) > 600 ? 2 : (rnd() < 0.55 ? 2 : 3));
+  const h = b.h > 0 ? Math.max(2.2, b.h) : floors * FLOOR_H;
+  // matériaux des murs (fichiers fonciers via l'IGN) : brique, pierre, meulière, béton, bois ; sinon enduit
+  BRICK = b.mw ? (b.mw === 4 ? 1 : 0) : (idx * 2654435761 >>> 0) % 100 < 18 ? 1 : 0;
+  const tint = 0.92 + rnd() * 0.12;
+  const col = BRICK ? new THREE.Color(1, 0.96, 0.92).multiplyScalar(0.82 + rnd() * 0.22) : b.mw && WALL_MAT[b.mw] ? WALL_MAT[b.mw].clone().multiplyScalar(tint) : PLASTER[idx % PLASTER.length].clone().multiplyScalar(tint);
   wallRun(B, p, h, floors, col, idx);
-  const pre = obb(p); const preFill = Math.abs(a) / Math.max(1, pre.a);
   const o = obb(p); const fill = Math.abs(a) / Math.max(1, o.a);
-  const useGable = !work && Math.abs(a) < 420 && fill > 0.8 && p.length <= 10 && floors <= 4 && rnd() < 0.85;
-  if (B.trim) details(B.trim, p, h, floors, col, idx, Math.abs(a) > 180, !useGable || floors >= 3); void preFill;
-  if (useGable) { gable(B, p, h, new THREE.Color().setHSL(0.03 + rnd() * 0.03, 0.2 + rnd() * 0.25, 0.65 + rnd() * 0.35), col); }
+  // toit : l'IGN dit s'il est plat (faîtage ≈ gouttière) ou en pente, et de combien ; sans donnée, on devine selon la forme
+  const shapeOk = fill > 0.72 && p.length <= 14 && Math.abs(a) < 1500;
+  const useGable = b.t !== undefined ? b.t >= 0.8 && shapeOk : !work && Math.abs(a) < 420 && fill > 0.8 && p.length <= 10 && floors <= 4 && rnd() < 0.85;
+  if (B.trim) details(B.trim, p, h, floors, col, idx, Math.abs(a) > 180, !useGable || floors >= 3);
+  const roofCol = b.mt && ROOF_MAT[b.mt] ? ROOF_MAT[b.mt].clone().multiplyScalar(0.9 + rnd() * 0.15) : new THREE.Color().setHSL(0.03 + rnd() * 0.03, 0.2 + rnd() * 0.25, 0.65 + rnd() * 0.35);
+  if (useGable) { gable(B, p, h, roofCol, col, b.t ?? -1); }
   else flatRoof(B, p, h);
   return true;
 }

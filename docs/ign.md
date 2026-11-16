@@ -64,6 +64,8 @@ Dans l'application Claude, ouvre le menu de l'environnement cloud dans la barre 
 
 ## Ce que je fais ensuite
 
+> ✅ Fait le 16 novembre 2026 : 4 565 bâtiments enrichis, 271 ajoutés, 3 237 logements.
+
 ```
 python3 -I tools/import_ign.py data/ign-*.json
 ```
