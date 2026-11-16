@@ -28,6 +28,8 @@ export class Heists {
     this.targets = [{ id: 'entrepot', nom: `Entrepôt de la zone (fictif)`, x: h.door.x, z: h.door.z, win: [22, 4], bags: 2, needsGun: false, needsMuscle: false },
       { id: 'fourgon', nom: 'Fourgon de transport de fonds (fictif)', x: b.x, z: b.z, win: [10, 11.5], bags: 4, needsGun: true, needsMuscle: true }];
   }
+  /** Tuyau reçu par message (gratuit). */
+  acceptTip(id: string) { if (this.plan) return false; const t = this.targets.find(q => q.id === id); if (!t) return false; this.plan = { target: t, repere: 0, phase: 'prep', t: 0, alarm: 0, complication: false }; return true; }
   get share() { let s = 0; for (const r of this.crew) s += ROLES[r].part; return s; }
   /** Options ajoutées au menu du receleur. */
   fenceOpts(buy: (label: string, cost: number, fn: () => void) => Opt): Opt[] {

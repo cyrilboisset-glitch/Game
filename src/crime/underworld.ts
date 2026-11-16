@@ -19,7 +19,7 @@ const CACHE_KINDS = ['argent', 'argent', 'argent', 'argent', 'argent', 'trousse'
 const HIDING = ['un sac planqué sous une haie', 'une boîte cachée derrière un coffret électrique', 'un sac au fond d\'un fossé', 'une boîte sous une dalle descellée', 'un sac coincé derrière une poubelle', 'un paquet glissé sous un buisson'];
 
 export class Underworld {
-  bag: string[] = []; trunk: string[] = []; stash: string[] = []; ammo = 0; tools = new Set<string>(); kits = 0; bleeding = false;
+  bonusUntil = 0; bag: string[] = []; trunk: string[] = []; stash: string[] = []; ammo = 0; tools = new Set<string>(); kits = 0; bleeding = false;
   owned = new Set<number>(); scouted = new Map<number, string>(); evacuated = new Map<number, number>();
   fence: Den | null = null; dens: Den[] = []; caches: Cache[] = []; inDen = false; safeSleep = false;
   pick: { e: Entry; t: number; x: number; z: number } | null = null; sel = 0;
@@ -97,7 +97,7 @@ export class Underworld {
     const g = this.g, P = g.player.pos, near = (d: Den) => Math.hypot(d.x - P.x, d.z - P.z) < 8;
     if (this.fence && near(this.fence)) {
       const h = g.clock.hour; if (h < 20 && h >= 6) return { title: 'Box fermé — le receleur reçoit de 20 h à 6 h', opts: [] };
-      const carNear = Math.hypot(g.car.pos.x - P.x, g.car.pos.z - P.z) < 15; const nb = (l: string[]) => l.filter(i => i !== 'billets'); const goods = carNear ? [...nb(this.bag), ...nb(this.trunk)] : nb(this.bag); const price = fencePrice(goods, g.heat.stars);
+      const carNear = Math.hypot(g.car.pos.x - P.x, g.car.pos.z - P.z) < 15; const nb = (l: string[]) => l.filter(i => i !== 'billets'); const goods = carNear ? [...nb(this.bag), ...nb(this.trunk)] : nb(this.bag); let price = fencePrice(goods, g.heat.stars); if (price !== null && this.bonusUntil > g.clock.day * 24 + g.clock.hour && goods.some(i => ['tele', 'portable', 'console', 'ecran', 'tablette', 'telephone'].includes(i))) price = Math.round(price * 1.2);
       const buy = (label: string, cost: number, fn: () => void): Opt => ({ label: `${label} — ${cost} €`, run: () => { if (g.money < cost) return g.hud.toast(`Il vous faut ${cost} €.`); g.money -= cost; fn(); g.sfx('coin'); } });
       const opts: Opt[] = [];
       if (goods.length) opts.push({ label: price === null ? 'Vendre : « Trop chaud, reviens quand ça se sera calmé »' : `Vendre ${goods.length} objet${goods.length > 1 ? 's' : ''}${carNear && this.trunk.length ? ' (sac + coffre)' : ''} — ${price} €`, run: () => { if (price === null) return g.hud.toast('« Tu as la gendarmerie aux fesses. Dégage. »', 3); g.money += price; g.hud.toast(`Le receleur prend ${summary(goods)} : +${price} €.`, 4); this.bag = this.bag.filter(i => i === 'billets'); if (carNear) this.trunk = this.trunk.filter(i => i === 'billets'); g.sfx('coin'); } });

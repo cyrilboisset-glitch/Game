@@ -28,6 +28,7 @@ import { Minimap } from './ui/minimap';
 import { touchContext } from './ui/touchctx';
 import { Debris } from './vehicles/wreck';
 import { Radio } from './audio/radio';
+import { Phone } from './ui/phone';
 import * as Save from './core/save';
 import { RoadGraph } from './roads/graph';
 import { buildPopulation, loadAddresses } from './npc/population';
@@ -78,7 +79,7 @@ const spotsOf = (types: string[]) => { const out: { x: number; z: number; nom: s
 const dead: { x: number; z: number }[] = []; const nodes: { x: number; z: number }[] = []; graph.pts.forEach((p, i) => { const d = graph.degree(i); if (d === 1) dead.push({ x: p[0], z: p[1] }); if (d >= 2 && i % 9 === 0) nodes.push({ x: p[0], z: p[1] }); });
 const schools = pois.filter(p => ['school', 'college', 'kindergarten'].includes(p.sous_type)).map(p => ({ x: p.x, z: p.y }));
 const neutres0 = neutralSpots(dead, (x, z) => game.coll.resolve({ x, z }, 35).depth > 0, schools);
-game.avatars = avatars; game.debris = new Debris(scene); game.uw.setup(neutres0, graph.pts.filter((_, i) => i % 7 === 3 && graph.degree(i) >= 2).map(p => ({ x: p[0], z: p[1] })), schools, npcs); game.uw.buildMarkers(scene);
+game.avatars = avatars; game.debris = new Debris(scene); const phone = new Phone(game, world); game.uw.setup(neutres0, graph.pts.filter((_, i) => i % 7 === 3 && graph.degree(i) >= 2).map(p => ({ x: p[0], z: p[1] })), schools, npcs); game.uw.buildMarkers(scene);
 const neutres1 = neutres0.filter(s => ![game.uw.fence, ...game.uw.dens].some(d => d && d.x === s.x && d.z === s.z));
 game.arson.attach(scene, (x, z) => { const i = graph.nearest(x, z, 60, true); if (i < 0) return null; const [px, pz] = graph.pts[i]; const e = graph.adj[i][0]; const q = e ? graph.pts[e.to] : [px + 1, pz]; const h = Math.atan2(q[0] - px, q[1] - pz); return { x: px + Math.cos(h) * 2.5, z: pz - Math.sin(h) * 2.5, h }; });
 game.heists.setup(neutres1, scene, game.uw.roadDist); const heistSpots = game.heists.targets.map(t => t.id); void heistSpots;
@@ -149,7 +150,7 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
 
 function frame(now: number) {
   const dt = Math.max(0, Math.min(0.05, (now - last) / 1000)); last = now; acc += dt;
-  game.update(dt); radio.update(game.mode === 'car' && !game.interior.inside && !game.sleeping, settings.muted ? 0 : settings.volume);
+  if (!phone.open) game.update(dt); phone.update(); radio.update(game.mode === 'car' && !game.interior.inside && !game.sleeping, settings.muted ? 0 : settings.volume);
   if (input.touch) { const N = game.needs.s, U = game.uw; input.setContext(touchContext(document.getElementById('prompt')!.textContent ?? '', { mode: game.mode, inside: game.interior.inside, sleeping: game.sleeping, observing: !!game.observed, weapon: game.weapon, ammo: U.ammo, weapons: game.weapons.size, night: game.night,
     faim: N.faim, soif: N.soif, vessie: N.vessie, energie: N.energie, sante: N.sante, food: game.inv.nourriture, water: game.inv.eau, kits: U.kits, bleeding: U.bleeding, wanted: game.heat.value > 0, hooded: game.hooded })); } const os = game.observed ? game.states.get(game.observed.id) : null; const fx = os ? os.x : game.pos.x, fz = os ? os.z : game.pos.z;
   chunks.update(fx, fz, VIEW); signs.update(fx, fz); updateStates(dt, fx, fz); placeCamera(dt);
@@ -175,7 +176,7 @@ function frame(now: number) {
   settings.setStats(`FPS ${Math.round(quality.fps)} · niveau ${quality.level}${quality.auto ? ' (auto)' : ''}<br>appels ${renderer.info.render.calls} · triangles ${(renderer.info.render.triangles / 1000).toFixed(0)} k · chunks ${chunks.loaded.size}`);
   frames++; fpsT += dt; if (fpsT > 0.5) { fps = Math.round(frames / fpsT); frames = 0; fpsT = 0; }
   hud.update(game.needs, game.heat, game.money, game.inv, game.clock.label, game.clock.day);
-  const mt = game.missionTarget() ?? game.crimeTarget(); minimap.draw(game.pos.x, game.pos.z, game.mode === 'car' ? car.heading : player.heading, now, mt, game.uw.markers());
+  const mt = game.missionTarget() ?? game.crimeTarget() ?? game.waypoint; minimap.draw(game.pos.x, game.pos.z, game.mode === 'car' ? car.heading : player.heading, now, mt, game.uw.markers());
   if (mt) { const d = Math.round(Math.hypot(mt.x - game.pos.x, mt.z - game.pos.z)); beacon.visible = true; beacon.position.set(mt.x, 0, mt.z); (beacon.children[0] as THREE.Mesh).scale.setScalar(1 + Math.sin(now * 0.004) * 0.08); const rem = game.missions.remaining(); hud.tracker(`🎯 ${mt.label}<br><span style="font-weight:400;opacity:.85">${d} m${rem !== null ? ' · ⏱ ' + Math.floor(rem / 60) + ':' + String(rem % 60).padStart(2, '0') : ''}</span>`); } else { beacon.visible = false; hud.tracker(null); }
   requestAnimationFrame(frame);
 }
