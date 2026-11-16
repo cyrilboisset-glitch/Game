@@ -48,7 +48,7 @@ addEventListener('resize', () => { renderer.setSize(innerWidth, innerHeight); po
 const [world, pois, addrs] = await Promise.all([loadWorld(), loadPoi(), loadAddresses()]);
 const chunks = new Chunks(world, mats, scene); const signs = new Signs(pois, scene);
 const car = new Car(); car.setVehicle('depart', 0xb9b2a0, SPECS.depart.hp); scene.add(car.root);
-const avatars = new AvatarFactory(); await avatars.load(import.meta.env.BASE_URL + 'assets/citizen.glb', import.meta.env.BASE_URL + 'assets/anims.glb');
+const avatars = new AvatarFactory(); await avatars.load(import.meta.env.BASE_URL + 'assets/citizen.glb', import.meta.env.BASE_URL + 'assets/ual.glb');
 const player = new Player(); player.attach(avatars); scene.add(player.root);
 
 const av = world.roads.filter(r => r.n === 'Avenue de la Gare' && r.t === 'secondary').sort((a, b) => b.p.length - a.p.length)[0];

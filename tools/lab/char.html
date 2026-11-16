@@ -5,7 +5,7 @@ import { AvatarFactory } from '/src/player/avatar.ts';
 const r = new THREE.WebGLRenderer({ antialias: true }); r.setSize(600, 500); document.body.appendChild(r.domElement);
 const s = new THREE.Scene(); s.background = new THREE.Color(0x889aaa); s.add(new THREE.HemisphereLight(0xffffff, 0x445544, 2), new THREE.DirectionalLight(0xffffff, 2));
 const cam = new THREE.PerspectiveCamera(40, 600 / 500, 0.1, 100); cam.position.set(0, 1.2, 4.5); cam.lookAt(0, 0.9, 0);
-const F = new AvatarFactory(); await F.load('/assets/citizen.glb', '/assets/anims.glb'); const P = new Player(); P.attach(F); s.add(P.root);
+const F = new AvatarFactory(); await F.load('/assets/citizen.glb', '/assets/ual.glb'); const P = new Player(); P.attach(F); s.add(P.root);
 const mode = new URLSearchParams(location.search).get('m') || 'idle';
 for (let i = 0; i < 40; i++) P.update(1 / 30, 0, (mode === 'idle' || mode === 'front') ? 0 : 1, Math.PI, mode === 'run', 1);
 P.root.position.set(0, 0, 0); P.root.rotation.y = mode === 'front' ? 0 : Math.PI;   // face caméra pour voir le visage ? non : dos

@@ -72,7 +72,7 @@ export class Game {
   /** Nouvelle tenue (armoire, boutique de vêtements) : couleurs différentes = signalement périmé. */
   newOutfit(): string { const o = this.player.outfit; let h = o.hoodie; while (h === o.hoodie) h = HOODIES[Math.floor(Math.random() * HOODIES.length)]; this.player.setOutfit({ ...o, hoodie: h, jeans: JEANS[Math.floor(Math.random() * JEANS.length)] }); this.applyWeapon(); this.enquete.changeOutfit(); return this.outfitId(); }
   giveWeapon(w: WeaponId) { const had = this.weapons.has(w); this.weapons.add(w); if (w === 'pistolet' || WEAPONS[w].dmg[1] > WEAPONS[this.weapon].dmg[1]) { this.weapon = w; this.applyWeapon(); } return !had; }
-  private applyWeapon() { const W = WEAPONS[this.weapon]; this.player.setWeapon(this.weapon === 'poings' ? null : W.color, W.len); }
+  private applyWeapon() { const W = WEAPONS[this.weapon]; this.player.setWeapon(this.weapon === 'poings' ? null : W.color, W.len, this.weapon === 'pistolet'); }
   /** Habitants à pied (renversés exclus) près d'un point. */
   walkersNear(x: number, z: number, r: number) { const out: { id: number; x: number; z: number; h: number; speed: number; minor: boolean }[] = []; for (const s of this.states.values()) { const c = this.npcCtl.get(s.id); if (c) { if (c.mode === 'ko' || Math.abs(c.x - x) > r || Math.abs(c.z - z) > r) continue; out.push({ id: s.id, x: c.x, z: c.z, h: c.h, speed: c.speed, minor: false }); continue; } if (s.kind !== 'marche' && s.kind !== 'dehors') continue; if (Math.abs(s.x - x) > r || Math.abs(s.z - z) > r) continue; out.push({ id: s.id, x: s.x, z: s.z, h: s.h, speed: s.speed, minor: this.npcs.get(s.id)?.minor ?? false }); } return out; }
   /** Renverse un habitant (adulte) : il reste au sol quelques secondes, décalé dans la direction du choc. */
@@ -80,11 +80,24 @@ export class Game {
   /** Pistolet braqué : les passants adultes devant vous lèvent les mains, puis s'enfuient. */
   private threaten() { if (this.mode !== 'foot' || this.weapon !== 'pistolet' || this.interior.inside) return; const p = this.player, fx = Math.sin(p.heading), fz = Math.cos(p.heading);
     for (const w of this.walkersNear(p.pos.x, p.pos.z, 8)) { if (w.minor || this.npcCtl.get(w.id)) continue; const dx = w.x - p.pos.x, dz = w.z - p.pos.z, d = Math.hypot(dx, dz); if (d < 8 && (dx * fx + dz * fz) / (d || 1) > 0.75 && !this.coll.blocked(p.pos.x, p.pos.z, w.x, w.z)) this.npcCtl.freeze(w.id, w.x, w.z, Math.atan2(-dx, -dz), 4); } }
+  private enterT: { v: WVehicle | null; t: number } | null = null;
+  /** Monter en voiture : le personnage se place côté conducteur, ouvre la portière, puis s'assoit. */
+  private startEnter(v: WVehicle | null) {
+    const p = this.player; const c = v ? { x: v.x, z: v.z, h: v.h, W: SPECS[v.type].W } : { x: this.car.pos.x, z: this.car.pos.z, h: this.car.heading, W: this.car.spec.W };
+    const lx = Math.cos(c.h), lz = -Math.sin(c.h); const side = { x: c.x + lx * (c.W / 2 + 0.55) + Math.sin(c.h) * 0.3, z: c.z + lz * (c.W / 2 + 0.55) + Math.cos(c.h) * 0.3 };
+    if (!this.coll.blocked(p.pos.x, p.pos.z, side.x, side.z)) p.pos.set(side.x, 0, side.z); p.heading = Math.atan2(c.x - p.pos.x, c.z - p.pos.z); p.openDoor(); if (!v) this.car.door(1); this.sfx('door', 0.5); this.enterT = { v, t: 0.6 };
+  }
+  /** Sauter la clôture ou le muret le plus proche (si l'autre côté est libre). */
+  private tryVault() {
+    const p = this.player; const f = this.props?.nearestFence(p.pos.x, p.pos.z, 1.4); if (!f) return false; const dx = f.qx - p.pos.x, dz = f.qz - p.pos.z, d = Math.hypot(dx, dz) || 1;
+    const to = new THREE.Vector3(f.qx + dx / d * 1.1, 0, f.qz + dz / d * 1.1); const q = { x: to.x, z: to.z }; if (this.coll.resolve(q, p.radius).depth > 0.05) { this.hud.toast('Impossible de passer par là.', 1.5); return false; }
+    p.vault(to, f.h); this.sfx('door', 0.3); return true;
+  }
   /** Positions des habitants pris en main (pour le rendu). */
   overrides() {
-    const m = new Map<number, { x: number; z: number; h: number; lying: boolean; fall?: number; speed: number; pose?: string; pw?: number; keep?: boolean }>();
+    const m = new Map<number, { x: number; z: number; h: number; lying: boolean; fall?: number; rising?: boolean; swing?: boolean; flinch?: boolean; speed: number; pose?: string; pw?: number; keep?: boolean }>();
     const T = this.npcCtl.t; for (const c of this.npcCtl.map.values()) { const fall = this.npcCtl.fallOf(c); const swing = c.swing !== undefined && T < c.swing ? Math.sin((1 - (c.swing - T) / 0.35) * Math.PI) : 0; const fl = c.flinch !== undefined && T < c.flinch ? Math.sin((1 - (c.flinch - T) / 0.35) * Math.PI) : 0;
-      m.set(c.id, { x: c.x, z: c.z, h: c.h, lying: fall > 0, fall, speed: c.speed, pose: fl > 0 ? 'flinch' : swing > 0 ? 'punch' : c.mode === 'combat' ? 'guard' : c.mode === 'fuite' ? 'cower' : c.mode === 'fige' ? 'handsup' : undefined, pw: fl > 0 ? fl : swing > 0 ? swing : 1 }); }
+      m.set(c.id, { x: c.x, z: c.z, h: c.h, lying: fall > 0, fall, rising: c.mode !== 'ko' && fall > 0, swing: swing > 0, flinch: fl > 0, speed: c.speed, pose: fl > 0 ? 'flinch' : swing > 0 ? 'punch' : c.mode === 'combat' ? 'guard' : c.mode === 'fuite' ? 'cower' : c.mode === 'fige' ? 'handsup' : undefined, pw: fl > 0 ? fl : swing > 0 ? swing : 1 }); }
     // témoins au téléphone ; passants mains en l'air devant un pistolet braqué
     for (const r of this.reports) { const e = m.get(r.witness); if (e) { if (!e.lying) e.pose = 'phone'; } else { const s = this.states.get(r.witness); if (s) m.set(r.witness, { x: s.x, z: s.z, h: s.h, lying: false, speed: s.speed, pose: 'phone', keep: true }); } }
     return m;
@@ -125,9 +138,9 @@ export class Game {
   /** Coup (F) : poings ou objet ; dans le dos d'une personne qui ne se méfie pas, un objet l'assomme net. */
   private attack() {
     if (this.attackCd > 0 || this.mode !== 'foot' || this.downT > 0) return; if (this.nearSchool()) { this.hud.toast('Pas ici : il y a une école à côté.', 2); return; }
-    this.arson.scare(this.pos.x, this.pos.z); if (this.weapon === 'pistolet' && this.uw.ammo > 0) { const e = this.uw.evacuated.size; this.uw.shoot(); if (this.uw.evacuated.size > e) this.crimeFile('tir', 1); return; } const W = WEAPONS[this.weapon]; this.attackCd = W.cd; this.player.punch();
-    const p = this.player; const list = this.walkersNear(p.pos.x, p.pos.z, 3); const t = findTarget(p.pos.x, p.pos.z, p.heading, list, W.range); if (!t) { this.sfx('ui'); return; }
-    const behind = isBehind(p.pos.x, p.pos.z, t), unaware = !this.npcCtl.get(t.id); const r = hitDamage(this.weapon, behind, unaware, Math.random()); const npc = this.npcs.get(t.id)!;
+    this.arson.scare(this.pos.x, this.pos.z); if (this.weapon === 'pistolet' && this.uw.ammo > 0) { const e = this.uw.evacuated.size; this.uw.shoot(); if (this.uw.evacuated.size > e) this.crimeFile('tir', 1); return; } const W = WEAPONS[this.weapon]; this.attackCd = W.cd;
+    const p = this.player; const blow = p.punch(); const list = this.walkersNear(p.pos.x, p.pos.z, 3); const t = findTarget(p.pos.x, p.pos.z, p.heading, list, W.range + (blow === 'pied' ? 0.35 : 0)); if (!t) { this.sfx('ui'); return; }
+    const behind = isBehind(p.pos.x, p.pos.z, t), unaware = !this.npcCtl.get(t.id); const r = hitDamage(this.weapon, behind, unaware, Math.random()); if (blow === 'pied') r.dmg = Math.round(r.dmg * 1.3); const npc = this.npcs.get(t.id)!;
     const mode = this.npcCtl.hit(t.id, t.x, t.z, t.h, r.dmg, npc.seed, this.weapon !== 'poings'); this.sfx('crash', 0.25); if (this.fx) this.fx.shake = Math.min(1, this.fx.shake + 0.15);
     this.hud.toast(mode === 'ko' ? (r.ko ? `${npc.prenom} est assommé${npc.genre === 'F' ? 'e' : ''}.` : `${npc.prenom} est à terre.`) : mode === 'combat' ? `${npc.prenom} se défend !` : `${npc.prenom} s'enfuit en criant.`, 2);
     this.crime(mode === 'ko' && r.ko ? 10 : 16, mode === 'ko' && r.ko ? 6 : 22);
@@ -267,10 +280,13 @@ export class Game {
   private updateFoot(dt: number) {
     const inp = this.input, p = this.player;
     p.picking = !!this.uw.pick; p.carrying = this.uw.carried > 6;
-    if (this.downT > 0) { this.downT -= dt; p.update(dt, 0, 0, this.camYaw, false, 1); } else p.update(dt, inp.x, inp.y, this.camYaw, inp.run && !this.crouch && this.uw.carried < 12, this.needs.speedFactor * this.uw.speedFactor * (this.crouch ? 0.45 : 1));
-    this.coll.resolve(p.pos as any, p.radius); this.footCollide();
-    p.root.rotation.order = 'YXZ'; p.root.rotation.x = this.downT > 0 ? -Math.PI / 2 * Math.min(1, (2.5 - this.downT) * 6, this.downT * 3) : 0;
-    p.root.position.copy(p.pos); this.car.update(dt, { throttle: 0, brake: 0, steer: 0, handbrake: true }); this.collideCar();
+    if (this.downT > 0) { if (p.act?.kind !== 'fallen') p.fall(); this.downT -= dt; if (this.downT <= 0) p.rise(); p.update(dt, 0, 0, this.camYaw, false, 1); }
+    else { if (p.act?.kind === 'bench' && (Math.hypot(inp.x, inp.y) > 0.3 || inp.hit('KeyE', 'action'))) p.stand(); p.update(dt, inp.x, inp.y, this.camYaw, inp.run && !this.crouch && this.uw.carried < 12, this.needs.speedFactor * this.uw.speedFactor * (this.crouch ? 0.45 : 1)); }
+    if (p.act?.kind !== 'vault') { this.coll.resolve(p.pos as any, p.radius); this.footCollide(); }
+    p.root.position.set(p.pos.x, p.act?.kind === 'vault' ? p.root.position.y : 0, p.pos.z);
+    if (p.act?.kind === 'bench') { this.needs.s.energie = Math.min(100, this.needs.s.energie + dt * 0.05); }
+    if (!p.act && inp.hit('Space', 'jump')) this.tryVault();
+    if (this.enterT && (this.enterT.t -= dt) <= 0) { const v = this.enterT.v; this.enterT = null; if (!v) { this.mode = 'car'; this.sfx('door'); this.uw.loadTrunk(); } else if (this.enterWorldVehicle(v)) { this.mode = 'car'; this.uw.loadTrunk(); } this.car.door(0); } this.car.update(dt, { throttle: 0, brake: 0, steer: 0, handbrake: true }); this.collideCar();
     const dCar = Math.hypot(this.car.pos.x - p.pos.x, this.car.pos.z - p.pos.z);
     if (this.uw.menuOpen()) { if (inp.hit('KeyN', 'next')) this.uw.action('N'); if (inp.hit('KeyB', 'buy')) this.uw.action('B'); }
     if (inp.hit('KeyG', 'fire')) this.arson.ignite();
@@ -278,8 +294,10 @@ export class Game {
     { const gs = this.nearestPoi(25); if (gs && gs.sous_type === 'gas' && inp.hit('KeyB', 'buy')) { if (this.money < 15) this.hud.toast('Il vous faut 15 €.'); else { this.money -= 15; this.arson.essence++; this.sfx('coin'); this.hud.toast('Jerrican d\'essence acheté (−15 €).'); } } }
     if (inp.hit('KeyI', 'dossier')) this.hud.toast(this.dossierText(), 7);
     if (inp.hit('KeyE', 'action') && !this.uw.action('E') && !this.heists.action() && !this.kid.action()) {
-      if (dCar < 4.2) { this.mode = 'car'; p.root.visible = false; this.sfx('door'); this.hud.toast('Vous montez dans la voiture.'); this.uw.loadTrunk(); }
-      else if (this.nearestVehicle()) { const v = this.nearestVehicle()!; if (this.enterWorldVehicle(v)) { this.mode = 'car'; p.root.visible = false; this.uw.loadTrunk(); } }
+      if (this.enterT || p.busy) { /* geste en cours */ }
+      else if (dCar < 4.2) { this.startEnter(null); }
+      else if (this.nearestVehicle()) { this.startEnter(this.nearestVehicle()!); }
+      else if (this.props && !this.nearNpc() && this.props.nearestBench(p.pos.x, p.pos.z, 1.6)) { const b = this.props.nearestBench(p.pos.x, p.pos.z, 1.6)!; p.sit(b.x + b.fx * 0.12, b.z + b.fz * 0.12, Math.atan2(b.fx, b.fz)); }
       else { const n = this.nearNpc(); if (n) { const npc = this.npcs.get(n.id)!; this.hud.toast(line(npc, n, this.clock.hour, this.talkCount++), 5); } else this.interior.tryEnter(); }
     }
     if (inp.hit('KeyF', 'hit')) this.attack();
@@ -297,7 +315,7 @@ export class Game {
     if (inp.hit('KeyI', 'dossier')) this.hud.toast(this.dossierText(), 7);
     if (inp.hit('KeyE', 'action')) {
       const f = this.car.heading, off = new THREE.Vector3(Math.cos(f) * 2.0, 0, -Math.sin(f) * 2.0); const np = this.car.pos.clone().add(off);
-      this.coll.resolve(np as any, this.player.radius); this.player.pos.copy(np); this.player.heading = f; this.camYaw = f; this.mode = 'foot'; this.player.root.visible = true; this.car.speed = 0; this.sfx('door'); this.hud.toast('Vous descendez.');
+      this.coll.resolve(np as any, this.player.radius); this.player.pos.copy(np); this.player.heading = f; this.camYaw = f; this.mode = 'foot'; this.player.root.visible = true; this.car.speed = 0; this.sfx('door'); this.player.unseat(); this.player.openDoor(); this.car.door(1); setTimeout(() => this.car.door(0), 700);
     }
     if (inp.hit('KeyL', 'lights')) this.car.setLights(!this.car.lightsOn);
     this.consumables(); this.bodyActions();
@@ -373,6 +391,9 @@ export class Game {
     const nv = this.nearestVehicle(); if (nv) { const sp = SPECS[nv.type]; P(sp.police ? sp.nom : nv.mine ? `E : monter (${sp.nom.toLowerCase()})` : `E : voler ${['utilitaire', 'break'].includes(nv.type) ? 'cet' : 'cette'} ${sp.nom.toLowerCase()}`); return; }
     const gs = this.nearestPoi(25); if (gs && gs.sous_type === 'gas') { P(`${gs.nom} — B : jerrican d'essence (15 €)${this.arson.essence ? ` · vous en avez ${this.arson.essence}` : ''}`); return; }
     const nn = this.nearNpc(); if (nn) { const npc = this.npcs.get(nn.id)!; P(npc.minor ? `${npc.prenom} (élève)` : `E : parler à ${npc.prenom} ${npc.nom} · toucher : observer`); return; }
-    P(this.interior.nearDoorPrompt());
+    if (this.player.act?.kind === 'bench') { P('E : se lever'); return; }
+    const door = this.interior.nearDoorPrompt(); if (door) { P(door); return; }
+    const pp = this.player.pos; if (this.props?.nearestBench(pp.x, pp.z, 1.6)) { P('E : s\'asseoir sur le banc'); return; }
+    const fe = this.props?.nearestFence(pp.x, pp.z, 1.4); P(fe ? `Espace : ${fe.h > 1.4 ? 'sauter la haie' : 'escalader le muret'}` : '');
   }
 }

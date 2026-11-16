@@ -1,7 +1,7 @@
 <!doctype html><meta charset="utf-8"><script type="module">
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-const L = new GLTFLoader(); const [a, b] = await Promise.all([L.loadAsync('/assets/citizen.glb'), L.loadAsync('/assets/anims.glb')]);
+const L = new GLTFLoader(); const [a, b] = await Promise.all([L.loadAsync('/assets/citizen.glb'), L.loadAsync('/assets/ual.glb')]);
 const dir = (root, from, to) => { root.updateMatrixWorld(true); const f = root.getObjectByName(from), t = root.getObjectByName(to); const d = t.getWorldPosition(new THREE.Vector3()).sub(f.getWorldPosition(new THREE.Vector3())).normalize(); return d.toArray().map(v => +v.toFixed(2)); };
 const pairs = [['LeftArm','LeftForeArm'],['LeftForeArm','LeftHand'],['LeftUpLeg','LeftLeg'],['LeftLeg','LeftFoot'],['Spine','Spine1'],['LeftShoulder','LeftArm']];
 const out = {}; for (const [f, t] of pairs) out[f + '>' + t] = { rpm: dir(a.scene, f, t), xbot: dir(b.scene, 'mixamorig' + f, 'mixamorig' + t) };

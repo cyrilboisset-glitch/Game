@@ -6,7 +6,7 @@ import { rng } from '/src/interiors/generator.ts';
 const r = new THREE.WebGLRenderer({ antialias: true }); r.setSize(1400, 520); r.toneMapping = THREE.ACESFilmicToneMapping; document.body.appendChild(r.domElement);
 const s = new THREE.Scene(); s.background = new THREE.Color(0x9fb2c2); s.add(new THREE.HemisphereLight(0xffffff, 0x556655, 1.6)); const d = new THREE.DirectionalLight(0xffffff, 2.2); d.position.set(2, 4, 5); s.add(d);
 const cam = new THREE.PerspectiveCamera(30, 1400 / 520, 0.1, 100); cam.position.set(0, 1.25, 9.5); cam.lookAt(0, 0.95, 0);
-const F = new AvatarFactory(); await F.load('/assets/citizen.glb', '/assets/anims.glb');
+const F = new AvatarFactory(); await F.load('/assets/citizen.glb', '/assets/ual.glb');
 const rg = rng(5); const H = [0x3d4f6b, 0x7a2f2f, 0x2f5a3d, 0x8a6a2f, 0x6b4a7a, 0x9a9a9a, 0x1f3f5f, 0xb05050]; const J = [0x2f4a7a, 0x1f2f4f, 0x3a3a40, 0x5a4a3a];
 const specs = [['europe','M',34],['maghreb','F',29],['afrique','M',41],['europe','F',8],['asie','F',55],['afrique','F',31],['europe','M',78],['maghreb','M',12],['europe_sud','F',67],['afrique','M',46],['europe','F',24],['maghreb','M',38]];
 specs.forEach(([o, g, age], i) => { const look = makeLook(rg, o, g, age); if (i === 9) look.width = 1.32; if (i === 4) look.width = 0.9; const av = F.create({ hoodie: H[i % 8], jeans: J[i % 4], shoes: 0xe8e8e8, hair: look.hairStyle === 'chauve' ? null : look.hairColor, hood: g === 'M' && i % 2 === 0 }, look);

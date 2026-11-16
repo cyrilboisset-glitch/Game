@@ -16,6 +16,7 @@ export const POSES: Record<string, PoseDef> = {
   guard: { dirs: { LeftArm: [0.35, -0.65, 0.65], LeftForeArm: [-0.25, 0.75, 0.6], RightArm: [-0.35, -0.65, 0.65], RightForeArm: [0.25, 0.75, 0.6], Spine: [0, 1, 0.18] } },
   cower: { dirs: { LeftArm: [0.5, 0.6, 0.4], LeftForeArm: [-0.4, 0.6, 0.6], RightArm: [-0.5, 0.6, 0.4], RightForeArm: [0.4, 0.6, 0.6], Spine: [0, 1, 0.3] } },
   hose: { dirs: { LeftArm: [0.1, -0.25, 0.97], LeftForeArm: [-0.35, 0.12, 0.93], RightArm: [-0.15, -0.5, 0.86], RightForeArm: [0.1, 0.05, 1], Spine: [0, 1, 0.1] } },
+  kick: { dirs: { RightUpLeg: [-0.12, 0.05, 1], RightLeg: [-0.05, 0.12, 1], Spine: [0, 1, -0.3], LeftArm: [0.6, -0.4, 0.3], RightArm: [-0.6, -0.5, -0.2] } },
   flinch: { dirs: { Spine: [0, 1, -0.4], Head: [0, 1, -0.35], LeftArm: [0.45, -0.5, 0.55], RightArm: [-0.45, -0.5, 0.55] } },
   sit: { dirs: { LeftUpLeg: [0.1, -0.08, 1], RightUpLeg: [-0.1, -0.08, 1], LeftLeg: [0.02, -1, 0.18], RightLeg: [-0.02, -1, 0.18], Spine: [0, 1, -0.1], LeftArm: [0.12, -0.4, 0.9], LeftForeArm: [-0.25, 0.4, 0.88], RightArm: [-0.12, -0.4, 0.9], RightForeArm: [0.25, 0.4, 0.88] }, drop: 0.48 },
   pick: { dirs: { LeftUpLeg: [0.2, -0.3, 0.93], RightUpLeg: [-0.2, -0.3, 0.93], LeftLeg: [0.05, -1, -0.25], RightLeg: [-0.05, -1, -0.25], Spine: [0, 1, 0.5], LeftArm: [0.15, -0.55, 0.82], LeftForeArm: [-0.1, 0.3, 0.95], RightArm: [-0.15, -0.55, 0.82], RightForeArm: [0.1, 0.3, 0.95] }, drop: 0.46 },

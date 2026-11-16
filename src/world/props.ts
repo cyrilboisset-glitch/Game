@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { MeshBuilder } from './meshbuilder';
 import { rnd } from './textures';
 import { orientedBox } from './buildings';
-import { sinkCircle, sinkSeg } from './solids';
+import { sinkCircle, sinkSeg, sinkFence, sinkBench } from './solids';
 
 const TRUNK = new THREE.Color('#5e4632'), TRUNK2 = new THREE.Color('#7a6a5a');
 /** Quad orienté (feuillage) avec normale imposée (normale « sphérique » du houppier → éclairage doux et volumique). */
@@ -44,7 +44,7 @@ export function addBush(crown: MeshBuilder, x: number, z: number, s: number) {
 const HEDGE = new THREE.Color('#3d5a2c'), WALL = new THREE.Color('#bdb3a2'), GRILLE = new THREE.Color('#2a2c2e');
 /** Clôture de propriété le long de la rue : haie taillée, ou muret + grille. (ax,az)→(bx,bz). */
 export function addFence(hedges: MeshBuilder, solids: MeshBuilder, poles: MeshBuilder, ax: number, az: number, bx: number, bz: number, kind: 'haie' | 'muret') {
-  const l = Math.hypot(bx - ax, bz - az); if (l < 1) return; const dx = (bx - ax) / l, dz = (bz - az) / l, nx = -dz, nz = dx; sinkSeg(ax, az, bx, bz, kind === 'haie' ? 0.4 : 0.18);
+  const l = Math.hypot(bx - ax, bz - az); if (l < 1) return; const dx = (bx - ax) / l, dz = (bz - az) / l, nx = -dz, nz = dx; sinkSeg(ax, az, bx, bz, kind === 'haie' ? 0.4 : 0.18); sinkFence(ax, az, bx, bz, kind === 'haie' ? 1.5 : 1.3);
   const box = (b: MeshBuilder, w: number, h: number, y0: number, col: THREE.Color) => { const P = (s: number, o: number, y: number) => [ax + dx * s + nx * o, y, az + dz * s + nz * o]; const o = w / 2;
     b.planar([P(0, o, y0), P(l, o, y0), P(l, o, y0 + h), P(0, o, y0 + h)], [[0, 0], [l / 2, 0], [l / 2, h / 2], [0, h / 2]], col); b.planar([P(l, -o, y0), P(0, -o, y0), P(0, -o, y0 + h), P(l, -o, y0 + h)], [[0, 0], [l / 2, 0], [l / 2, h / 2], [0, h / 2]], col);
     b.planar([P(0, -o, y0 + h), P(0, o, y0 + h), P(l, o, y0 + h), P(l, -o, y0 + h)], [[0, 0], [w / 2, 0], [w / 2, l / 2], [0, l / 2]], col.clone().multiplyScalar(1.1)); b.planar([P(0, -o, y0), P(0, o, y0), P(0, o, y0 + h), P(0, -o, y0 + h)], [[0, 0], [1, 0], [1, 1], [0, 1]], col); b.planar([P(l, o, y0), P(l, -o, y0), P(l, -o, y0 + h), P(l, o, y0 + h)], [[0, 0], [1, 0], [1, 1], [0, 1]], col); };
@@ -55,7 +55,7 @@ export function addFence(hedges: MeshBuilder, solids: MeshBuilder, poles: MeshBu
 const WOOD = new THREE.Color('#7a5434'), IRON = new THREE.Color('#2b2f33'), BIN = new THREE.Color('#2f5a3a'), SIGNR = new THREE.Color('#c41e1e'), SIGNW = new THREE.Color('#f2f2f2');
 /** Banc public face à la rue (fx,fz = direction vers la chaussée). */
 export function addBench(solids: MeshBuilder, x: number, z: number, fx: number, fz: number) {
-  const rx = fz, rz = -fx; sinkSeg(x - rx * 0.85, z - rz * 0.85, x + rx * 0.85, z + rz * 0.85, 0.28); orientedBox(solids, x, z, fx, fz, 1.7, 0.45, 0.05, 0.42, WOOD); orientedBox(solids, x - fx * 0.24, z - fz * 0.24, fx, fz, 1.7, 0.05, 0.4, 0.5, WOOD);
+  const rx = fz, rz = -fx; sinkSeg(x - rx * 0.85, z - rz * 0.85, x + rx * 0.85, z + rz * 0.85, 0.28); sinkBench(x, z, fx, fz); orientedBox(solids, x, z, fx, fz, 1.7, 0.45, 0.05, 0.42, WOOD); orientedBox(solids, x - fx * 0.24, z - fz * 0.24, fx, fz, 1.7, 0.05, 0.4, 0.5, WOOD);
   for (const s2 of [-0.75, 0.75]) orientedBox(solids, x + rx * s2, z + rz * s2, fx, fz, 0.06, 0.5, 0.42, 0, IRON);
 }
 /** Poubelle de rue. */

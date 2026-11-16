@@ -11,6 +11,7 @@ export class Car {
   pos = new THREE.Vector3(); heading = 0; speed = 0; steer = 0; lateral = 0; yawRate = 0;
   private wheelMeshes: { m: THREE.Mesh; front: boolean }[] = []; private mats = vehicleMaterials();
   private geos: THREE.BufferGeometry[] = []; private orig: Float32Array[] = []; broken = new Set<number>(); cracked = false;
+  private doorP?: THREE.Group; private doorCur = 0; private doorTgt = 0;
   headlights: THREE.SpotLight[] = []; beams: THREE.Mesh[] = []; lightsOn = false; slip = 0; braking = false; wheelRoll = 0; smokeAcc = 0;
   get length() { return this.spec.L; }
   get dead() { return this.hp <= 0; }
@@ -22,6 +23,8 @@ export class Car {
     for (const w of g.wheels) { const m = new THREE.Mesh(w.x < 0 ? g.wheelL : g.wheelR, this.mats.trim); m.position.set(w.x, w.y, w.z); m.castShadow = true; this.body.add(m); this.wheelMeshes.push({ m, front: w.front }); }
     const L = this.spec.L; for (const x of [-0.6, 0.6]) { const sp = new THREE.SpotLight(0xfff1d0, 0, 90, 0.5, 0.6, 1.4); sp.position.set(x, 0.75, L / 2 - 0.2); const t = new THREE.Object3D(); t.position.set(x * 0.5, 0.2, L / 2 + 25); this.body.add(sp, t); sp.target = t; this.headlights.push(sp); }
     for (const x of [-0.6, 0.6]) { const cone = new THREE.Mesh(new THREE.ConeGeometry(2.4, 16, 20, 1, true).translate(0, -8, 0).rotateX(-Math.PI / 2 + 0.08), new THREE.MeshBasicMaterial({ color: 0xfff2cf, transparent: true, opacity: 0.07, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false })); cone.position.set(x, 0.75, L / 2); cone.scale.set(0.45, 0.45, 1); cone.visible = false; this.body.add(cone); this.beams.push(cone); }
+    // portière conducteur (côté gauche) : panneau visible seulement quand elle s'ouvre, pivot à l'avant
+    { const sp = this.spec; this.doorP = new THREE.Group(); this.doorP.position.set(sp.W / 2 - 0.02, 0, 0.55); const pan = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.62, 1.05), this.mats.paint); pan.position.set(0, 0.62, -0.52); const win = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.4, 0.9), this.mats.glass); win.position.set(0, 1.13, -0.55); this.doorP.add(pan, win); this.doorP.visible = false; this.body.add(this.doorP); }
     this.root.add(this.body); this.refreshPaint(); if (this.lightsOn) this.setLights(true);
   }
   refreshPaint() { const dirt = 1 - Math.min(1, this.hp / this.spec.hp); this.mats.paint.color.set(this.paint).lerp(new THREE.Color(0x2a2522), dirt * 0.55); }
@@ -36,6 +39,8 @@ export class Car {
   /** Dégâts : retourne true si le véhicule vient de tomber en panne. */
   damage(amount: number) { const was = this.hp > 0; this.hp = Math.max(0, this.hp - amount / this.spec.mass); this.refreshPaint(); return was && this.hp <= 0; }
   repair() { this.hp = this.spec.hp; this.refreshPaint(); this.geos.forEach((g, i) => { const p = g.getAttribute('position') as THREE.BufferAttribute; (p.array as Float32Array).set(this.orig[i]); p.needsUpdate = true; g.computeVertexNormals(); }); this.broken.clear(); this.setCracked(false); this.setLights(this.lightsOn); }
+  /** Ouvre (1) ou ferme (0) la portière conducteur. */
+  door(t: number) { this.doorTgt = t; }
   setFlash(on: boolean) { this.mats.lights.color.setScalar(on ? 1 : 0.35); }
   update(dt: number, c: Controls) {
     const s = this.spec; const up = 1 + this.upgrade * 0.08; const dead = this.dead; const accel = s.accel * up * (this.hp < s.hp * 0.25 ? 0.6 : 1);
@@ -55,6 +60,7 @@ export class Car {
     this.wheelRoll += this.speed * dt / s.wheelR;
     for (const w of this.wheelMeshes) { w.m.rotation.set(this.wheelRoll, w.front ? this.steer * 0.8 : 0, 0, 'YXZ'); }
     this.root.position.copy(this.pos); this.root.rotation.y = this.heading;
+    if (this.doorP) { this.doorCur += (this.doorTgt - this.doorCur) * Math.min(1, dt * 9); this.doorP.visible = this.doorCur > 0.03; this.doorP.rotation.y = -this.doorCur * 1.05; }
     this.body.rotation.z = THREE.MathUtils.lerp(this.body.rotation.z, -this.yawRate * this.speed * 0.004, 0.1);
     this.body.rotation.x = THREE.MathUtils.lerp(this.body.rotation.x, -(c.throttle - c.brake) * 0.015, 0.1);
   }
