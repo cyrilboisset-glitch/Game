@@ -16,6 +16,7 @@ import { circleVsBox, type PropColliders } from './world/solids';
 import { toLocal } from './vehicles/damage';
 import type { Debris } from './vehicles/wreck';
 import { Inbox } from './crime/messages';
+import { Skills, SKILLS, sightK, rankOf, type Skill } from './crime/skills';
 import type { VehicleType } from './vehicles/specs';
 import { NpcControl } from './crime/npcControl';
 import { gatherWitnesses, describe as describeWitness, merge, recognizability, sightRange, reportDelay, type Profile } from './crime/perception';
@@ -49,7 +50,7 @@ export class Game {
   mode: Mode = 'foot'; sleeping = false; money = 40; inv = { nourriture: 1, eau: 1 }; looted = new Set<string>();
   needs = new Needs(); heat = new Heat(); clock: Clock; coll: Collision;
   vehicles!: VehicleWorld; traffic!: Traffic; smoke?: Smoke; tireSmoke?: Smoke; fx?: Effects; police?: Police; missions = new Missions(); offers: Offer[] = []; private mbase?: Omit<GenCtx, 'day' | 'rep' | 'at' | 'seed'>; private offerDay = -1; boarded: number | null = null; props?: PropColliders; npcCars: { x: number; z: number; h: number; speed: number; type: VehicleType }[] = []; npcCtl = new NpcControl(); reports: { witness: number; due: number; v: number; desc: Profile }[] = []; profile: Profile = { outfit: null, vehicle: null, face: false };
-  inbox = new Inbox(); waypoint: { x: number; z: number; label: string } | null = null; debris?: Debris; onRadio: () => void = () => {}; private angry = new Map<number, number>(); private blockT = new Map<number, number>(); private scanT = 0;
+  skills = new Skills(); inbox = new Inbox(); waypoint: { x: number; z: number; label: string } | null = null; debris?: Debris; onRadio: () => void = () => {}; private angry = new Map<number, number>(); private blockT = new Map<number, number>(); private scanT = 0;
   private wasCar = false; carOff = 0; private lookT = 9; uw = new Underworld(this); arson = new Arson(this); heists = new Heists(this); kid = new Kidnapping(this); enquete = new Enquete(); prisonDays = 0; avatars?: AvatarFactory; private schools: { x: number; z: number }[] = [];
   crouch = false; hidden = false; night = false; weapons = new Set<WeaponId>(['poings']); weapon: WeaponId = 'poings'; private attackCd = 0; downT = 0; private t = 0; vis = 1; dealerSel = 0; onMissionsKey: () => void = () => {}; sfx: (n: string, v?: number) => void = () => {}; onOffers: () => void = () => {}; private ramT = 0; private speedMsg = 0; interior!: InteriorManager; observed: Npc | null = null; npcs = new Map<number, Npc>(); sim?: NpcSim; states = new Map<number, NpcState>(); talkCount = 0; camYaw = 0; camPitch = 0.28; private saveT = 0; private ctl: Controls = { throttle: 0, brake: 0, steer: 0, handbrake: false };
   constructor(public world: WorldData, public pois: Poi[], public car: Car, public player: Player, public input: Input, public hud: Hud, startHour: number, private start: { x: number; z: number; h: number }, scene: THREE.Scene) {
@@ -120,6 +121,9 @@ export class Game {
   /** Délit : n'est comptabilisé qu'en proportion de ce qui a été vu (gendarmerie à portée, témoin, personne). */
   /** Signalement différé (témoin, habitant cambriolé). */
   report(witness: number, delay: number, v: number, desc: Profile) { if (!this.reports.some(r => r.witness === witness)) this.reports.push({ witness, due: this.t + delay, v, desc }); }
+  /** Réputation dans le milieu (0-100) : débloque les gros coups ; annonce les changements de rang. */
+  repUp(n: number) { const r0 = this.missions.rep, k0 = rankOf(r0); this.missions.rep = Math.max(0, Math.min(100, r0 + n)); const k1 = rankOf(this.missions.rep); if (k1 !== k0 && n > 0) this.hud.toast(`Réputation dans le milieu : vous êtes maintenant « ${k1} ».`, 4); }
+  levelUp(s: Skill, l: number) { this.sfx('win'); this.hud.toast(`${SKILLS[s].nom} niveau ${l} : ${SKILLS[s].effet(l)}.`, 4); }
   /** Proche d'une école : aucune violence ici. */
   nearSchool(r = 70) { return this.schools.some(s => Math.hypot(s.x - this.pos.x, s.z - this.pos.z) < r); }
   crime(v: number, noise = 15) {
@@ -127,8 +131,8 @@ export class Game {
     if (pd < 80 * Math.max(0.3, this.vis)) { this.heat.add(v); this.profile = merge(this.profile, { outfit: this.mode === 'foot' ? this.outfitId() : null, vehicle: this.vehicleId(), face: !this.hooded }); return; }   // vu par la gendarmerie : immédiat
     const cands: { id: number; x: number; z: number; minor: boolean }[] = [];
     for (const s of this.states.values()) { const c = this.npcCtl.get(s.id); if (c) { if (c.mode !== 'ko') cands.push({ id: s.id, x: c.x, z: c.z, minor: false }); continue; } if (s.kind === 'dedans' || s.kind === 'absent') continue; if (Math.abs(s.x - px) > 60 || Math.abs(s.z - pz) > 60) continue; cands.push({ id: s.id, x: s.x, z: s.z, minor: this.npcs.get(s.id)?.minor ?? false }); }
-    const ws = gatherWitnesses(px, pz, cands, ins ? 0 : sightRange(this.night, this.crouch, this.hidden), ins ? noise * 0.4 : noise, (a, b2, c2, d) => this.coll.blocked(a, b2, c2, d));
-    if (!ws.length) { this.heat.add(v * 0.15); return; }
+    const ws = gatherWitnesses(px, pz, cands, ins ? 0 : sightRange(this.night, this.crouch, this.hidden) * sightK(this.skills.level('discretion')), ins ? noise * 0.4 : noise, (a, b2, c2, d) => this.coll.blocked(a, b2, c2, d));
+    if (!ws.length) { this.heat.add(v * 0.15); if (v >= 10) { const up = this.skills.gain('discretion', 1); if (up) this.levelUp('discretion', up); } return; }
     ws.forEach((w, i) => { if (this.reports.some(r => r.witness === w.id)) return; this.reports.push({ witness: w.id, due: this.t + reportDelay(Math.random(), w.seen), v: i === 0 ? v * (w.seen ? 0.7 : 0.4) : v * 0.12, desc: describeWitness(w, this.outfitId(), this.vehicleId(), this.hooded) }); });
     this.hud.toast(ws.some(w => w.seen) ? `Vu par ${ws.length} témoin${ws.length > 1 ? 's' : ''}${ws.length > 1 ? ' : ils vont' : ' : il va'} appeler la gendarmerie.` : 'Quelqu\'un a entendu…', 2.5);
   }
@@ -150,14 +154,14 @@ export class Game {
   }
   /** Arrestation : amende, perte de la marchandise (inventaire), retour devant la gendarmerie, trois heures perdues. Pas de mort. */
   arrest() {
-    const stars = this.heat.stars; const days = this.enquete.sentence(stars); this.heists.arrested(); this.kid.arrested(); if (days > 0) { this.prison(days); return; } const fine = fineFor(this.money, stars); this.money -= fine; const lost = this.inv.nourriture + this.inv.eau + this.uw.seize(); this.inv = { nourriture: 0, eau: 0 }; this.heat.value = 0; this.police?.clearAll();
+    const stars = this.heat.stars; const days = this.enquete.sentence(stars); this.repUp(days > 0 ? -8 : -3); this.heists.arrested(); this.kid.arrested(); if (days > 0) { this.prison(days); return; } const fine = fineFor(this.money, stars); this.money -= fine; const lost = this.inv.nourriture + this.inv.eau + this.uw.seize(); this.inv = { nourriture: 0, eau: 0 }; this.heat.value = 0; this.police?.clearAll();
     const gp = this.pois.find(p => p.sous_type === 'police' && /gendarmerie/i.test(p.nom)) ?? { x: -848, y: -89 }; this.mode = 'foot'; this.player.root.visible = true; this.player.pos.set(gp.x + 3, 0, gp.y + 6); this.camYaw = 0; this.car.speed = 0; this.clock.hour += 3; this.needs.tick(3, false);
     this.boarded = null; { const e = this.missions.fail('marchandise saisie'); if (e) this.onOffers(); }
     this.sfx('arrest'); this.hud.toast(`ARRESTATION — amende ${fine} €${lost ? `, marchandise saisie (${lost})` : ''}. Vous sortez de la gendarmerie.`, 7);
   }
   /** Prison : les jours passent (maison d'arrêt hors de la commune), armes et butin saisis, dossiers clos ; la planque peut avoir été perquisitionnée. */
   private prison(days: number) {
-    const raid = this.enquete.mandat && this.uw.stash.length && Math.random() < 0.5; if (raid) this.uw.stash = []; this.uw.seize(); this.uw.ammo = 0; this.weapons = new Set(['poings']); this.weapon = 'poings'; this.applyWeapon();
+    const raid = this.enquete.mandat && this.uw.stash.length && ![...this.uw.ups].some(k => k.endsWith(':coffre')) && Math.random() < 0.5; if (raid) this.uw.stash = []; this.uw.seize(); this.uw.ammo = 0; this.weapons = new Set(['poings']); this.weapon = 'poings'; this.applyWeapon();
     const fine = Math.min(this.money, 50 * days); this.money -= fine; this.heat.value = 0; this.police?.clearAll(); this.enquete.closeAll(); this.inv = { nourriture: 0, eau: 0 }; this.prisonDays += days;
     this.clock.day += days; this.clock.hour = 10; this.needs = new Needs({ faim: 60, soif: 60, energie: 80, vessie: 20, sante: 100 }); this.uw.bleeding = false; this.profile = { outfit: null, vehicle: null, face: false };
     const gp = this.pois.find(p => p.sous_type === 'police' && /gendarmerie/i.test(p.nom)) ?? { x: -848, y: -89 }; this.mode = 'foot'; this.player.root.visible = true; this.player.pos.set(gp.x + 3, 0, gp.y + 6); this.car.speed = 0; this.boarded = null;
@@ -241,9 +245,9 @@ export class Game {
   restore() {
     const s = Save.load(); if (!s) return false;
     this.player.pos.set(s.px, 0, s.pz); this.player.heading = s.heading; this.mode = s.mode; this.car.pos.set(s.car.x, 0, s.car.z); this.car.heading = s.car.h; if (s.car.type) this.car.setVehicle(s.car.type, s.car.paint ?? 0xb9b2a0, s.car.hp ?? 60, s.car.up ?? 0); for (const g of s.garage ?? []) this.vehicles.add({ type: g.type, paint: g.paint, hp: g.hp, x: g.x, z: g.z, h: g.h, speed: 0, kind: 'gare', mine: true, upgrade: g.up ?? 0, stun: 0 });
-    this.needs = new Needs(s.needs); this.money = s.money; this.inv = s.inv; this.heat.value = s.heat; this.clock.hour = s.hour; this.clock.day = s.day; this.looted = new Set(s.looted); this.missions.rep = s.rep ?? 0; this.missions.done = s.done ?? 0; this.missions.active = (s.mission as any) ?? null; this.camYaw = s.heading; this.uw.load(s.uw); const w3 = (s as any).w3; if (w3) { this.enquete.load(w3.e); this.heists.load(w3.h); this.kid.load(w3.k); this.arson.essence = w3.ess ?? 0; this.prisonDays = w3.pd ?? 0; this.inbox.load(w3.inbox); this.waypoint = w3.wp ?? null; } for (const w of s.weapons ?? []) this.weapons.add(w as WeaponId); return true;
+    this.needs = new Needs(s.needs); this.money = s.money; this.inv = s.inv; this.heat.value = s.heat; this.clock.hour = s.hour; this.clock.day = s.day; this.looted = new Set(s.looted); this.missions.rep = s.rep ?? 0; this.missions.done = s.done ?? 0; this.missions.active = (s.mission as any) ?? null; this.camYaw = s.heading; this.uw.load(s.uw); const w3 = (s as any).w3; if (w3) { this.enquete.load(w3.e); this.heists.load(w3.h); this.kid.load(w3.k); this.arson.essence = w3.ess ?? 0; this.prisonDays = w3.pd ?? 0; this.inbox.load(w3.inbox); this.skills.load(w3.sk); this.waypoint = w3.wp ?? null; } for (const w of s.weapons ?? []) this.weapons.add(w as WeaponId); return true;
   }
-  persist() { Save.save({ px: this.player.pos.x, pz: this.player.pos.z, heading: this.player.heading, mode: this.mode, car: { x: this.car.pos.x, z: this.car.pos.z, h: this.car.heading, type: this.car.spec.type, paint: this.car.paint, hp: this.car.hp, up: this.car.upgrade }, garage: this.vehicles.list.filter(v => v.mine).map(v => ({ type: v.type, paint: v.paint, hp: v.hp, x: v.x, z: v.z, h: v.h, up: v.upgrade })), needs: this.needs.s, money: this.money, inv: this.inv, heat: this.heat.value, hour: this.clock.hour, day: this.clock.day, looted: [...this.looted], rep: this.missions.rep, done: this.missions.done, mission: this.missions.active, uw: this.uw.save(), weapons: [...this.weapons], w3: { e: this.enquete.save(), h: this.heists.save(), k: this.kid.save(), ess: this.arson.essence, pd: this.prisonDays, inbox: this.inbox.save(), wp: this.waypoint } }); }
+  persist() { Save.save({ px: this.player.pos.x, pz: this.player.pos.z, heading: this.player.heading, mode: this.mode, car: { x: this.car.pos.x, z: this.car.pos.z, h: this.car.heading, type: this.car.spec.type, paint: this.car.paint, hp: this.car.hp, up: this.car.upgrade }, garage: this.vehicles.list.filter(v => v.mine).map(v => ({ type: v.type, paint: v.paint, hp: v.hp, x: v.x, z: v.z, h: v.h, up: v.upgrade })), needs: this.needs.s, money: this.money, inv: this.inv, heat: this.heat.value, hour: this.clock.hour, day: this.clock.day, looted: [...this.looted], rep: this.missions.rep, done: this.missions.done, mission: this.missions.active, uw: this.uw.save(), weapons: [...this.weapons], w3: { e: this.enquete.save(), h: this.heists.save(), k: this.kid.save(), ess: this.arson.essence, pd: this.prisonDays, inbox: this.inbox.save(), wp: this.waypoint, sk: this.skills.save() } }); }
   get pos() { return this.mode === 'car' ? this.car.pos : this.player.pos; }
   nearestPoi(maxD = 16) { let best: Poi | null = null, bd = maxD; for (const p of this.pois) { const d = Math.hypot(p.x - this.pos.x, p.y - this.pos.z); if (d < bd) { bd = d; best = p; } } return best; }
   dow() { return (this.clock.day - 1 + 2) % 7; } // le jour 1 est un mercredi (hypothèse)
@@ -270,11 +274,12 @@ export class Game {
     if (this.sleeping && !this.interior.inside && !this.uw.safeSleep && Math.random() < dt * 0.02) { this.wake(); this.crime(12); this.hud.toast('Du bruit vous réveille : on vous a repéré.'); }
     if (this.sleeping && (inp.hit('KeyR', 'sleep') || this.needs.s.energie >= 98)) this.wake();
     this.traffic.update(dt, this.pos.x, this.pos.z, this.obstacles()); if (!this.interior.inside) this.trafficHonks(dt); this.debris?.update(dt); this.policeUpdate(dt); if (this.clock.day !== this.offerDay) this.refreshOffers(); if (!this.interior.inside) this.missionUpdate(dt); if (inp.hit('KeyJ', 'missions')) this.onMissionsKey(); this.dealer();
-    const h = this.clock.tick(dt); this.needs.tick(h, this.sleeping, this.mode === 'foot' && inp.run && this.player.speed > 3 ? 1.8 : 1);
+    const running = this.mode === 'foot' && inp.run && this.player.speed > 3; const h = this.clock.tick(dt); this.needs.tick(h, this.sleeping, running ? 1.8 * (1 - 0.07 * this.skills.level('endurance')) : 1);
+    { const up = running ? this.skills.gain('endurance', dt / 45) : this.mode === 'car' && Math.abs(this.car.speed) > 14 ? this.skills.gain('conduite', Math.abs(this.car.speed) * dt / 600) : null; if (up) this.levelUp(running ? 'endurance' : 'conduite', up); this.car.skill = this.skills.level('conduite'); }
     this.heat.tick(this.uw.inDen ? h * 3 : h, this.mode === 'foot' && this.player.speed < 1);
     { const m = this.inbox.tick(this.clock.day, this.clock.hour, this.missions.rep, this.heat.stars); if (m) { this.hud.toast(`📱 Nouveau message de ${m.from}`, 3); this.sfx('coin', 0.4); if (m.kind === 'receleur') this.uw.bonusUntil = this.clock.day * 24 + 30; } }
     if (this.waypoint && Math.hypot(this.waypoint.x - this.pos.x, this.waypoint.z - this.pos.z) < 15) { this.hud.toast(`Arrivé : ${this.waypoint.label}`, 2); this.waypoint = null; }
-    { const e = this.enquete.tick(h, this.clock.day, this.clock.hour); for (const d of e.mandat) this.hud.toast(`⚠ Enquête « ${d.titre} » : les gendarmes ont assez de preuves. Mandat d'arrêt contre vous.`, 6); for (const d of e.classes) this.hud.toast(`Enquête « ${d.titre} » classée faute de preuves.`, 4); if (this.enquete.mandat) this.heat.value = Math.max(this.heat.value, 8); }
+    { const e = this.enquete.tick(h, this.clock.day, this.clock.hour, this.uw.carHidden ? this.carId() : null); for (const d of e.mandat) this.hud.toast(`⚠ Enquête « ${d.titre} » : les gendarmes ont assez de preuves. Mandat d'arrêt contre vous.`, 6); for (const d of e.classes) this.hud.toast(`Enquête « ${d.titre} » classée faute de preuves.`, 4); if (this.enquete.mandat) this.heat.value = Math.max(this.heat.value, 8); }
     if (!this.interior.busy) this.hud.veil(this.sleeping ? 0.75 : this.needs.s.energie < 8 ? 0.35 : 0); this.hud.tick(dt);
     if (this.needs.dead) { this.hud.toast('Vous êtes à bout… vous revenez à vous, sans grand-chose.', 5); this.respawn(true); }
     this.ctl.throttle = 0; if ((this.saveT += dt) > 8) { this.saveT = 0; this.persist(); }
@@ -286,7 +291,7 @@ export class Game {
     const inp = this.input, p = this.player;
     p.picking = !!this.uw.pick; p.carrying = this.uw.carried > 6;
     if (this.downT > 0) { if (p.act?.kind !== 'fallen') p.fall(); this.downT -= dt; if (this.downT <= 0) p.rise(); p.update(dt, 0, 0, this.camYaw, false, 1); }
-    else { if (p.act?.kind === 'bench' && (Math.hypot(inp.x, inp.y) > 0.3 || inp.hit('KeyE', 'action'))) p.stand(); p.update(dt, inp.x, inp.y, this.camYaw, inp.run && !this.crouch && this.uw.carried < 12, this.needs.speedFactor * this.uw.speedFactor * (this.crouch ? 0.45 : 1)); }
+    else { if (p.act?.kind === 'bench' && (Math.hypot(inp.x, inp.y) > 0.3 || inp.hit('KeyE', 'action'))) p.stand(); p.update(dt, inp.x, inp.y, this.camYaw, inp.run && !this.crouch && this.uw.carried < 12, this.needs.speedFactor * this.uw.speedFactor * (this.crouch ? 0.45 : 1) * (inp.run ? 1 + 0.02 * this.skills.level('endurance') : 1)); }
     if (p.act?.kind !== 'vault') { this.coll.resolve(p.pos as any, p.radius); this.footCollide(); }
     p.root.position.set(p.pos.x, p.act?.kind === 'vault' ? p.root.position.y : 0, p.pos.z);
     if (p.act?.kind === 'bench') { this.needs.s.energie = Math.min(100, this.needs.s.energie + dt * 0.05); }

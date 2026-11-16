@@ -3,8 +3,9 @@ import type { Game } from '../game';
 import type { WorldData } from '../world/data';
 import * as Save from '../core/save';
 import { ROLES, type Role } from '../crime/heist';
+import { SKILLS, RANKS, rankOf, type Skill } from '../crime/skills';
 
-type Tab = 'carte' | 'messages' | 'dossiers' | 'contacts' | 'sauvegardes';
+type Tab = 'carte' | 'messages' | 'moi' | 'dossiers' | 'contacts' | 'sauvegardes';
 const esc = (t: string) => t.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' } as Record<string, string>)[c]);
 
 export class Phone {
@@ -15,7 +16,7 @@ export class Phone {
     this.btn.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); this.toggle(); });
     this.el.id = 'phone'; this.el.className = 'ui'; this.el.style.display = 'none'; document.body.appendChild(this.el);
     this.el.innerHTML = `<div class="ph-top"><b>📱 Téléphone</b><span class="ph-clock"></span><button data-x="1">✕</button></div><div class="ph-body"></div>
-      <div class="ph-tabs">${(['carte', 'messages', 'dossiers', 'contacts', 'sauvegardes'] as Tab[]).map(t => `<button data-t="${t}">${{ carte: '🗺️<br>Carte', messages: '✉️<br>Messages', dossiers: '🗂️<br>Dossiers', contacts: '👥<br>Contacts', sauvegardes: '💾<br>Sauver' }[t]}</button>`).join('')}</div>`;
+      <div class="ph-tabs">${(['carte', 'messages', 'moi', 'dossiers', 'contacts', 'sauvegardes'] as Tab[]).map(t => `<button data-t="${t}">${{ carte: '🗺️<br>Carte', messages: '✉️<br>Messages', moi: '⭐<br>Moi', dossiers: '🗂️<br>Dossiers', contacts: '👥<br>Contacts', sauvegardes: '💾<br>Sauver' }[t]}</button>`).join('')}</div>`;
     this.el.addEventListener('pointerdown', e => { const b = (e.target as HTMLElement).closest('button') as HTMLButtonElement | null; if (!b) return; e.preventDefault(); if (b.dataset.x) this.toggle(false); else if (b.dataset.t) this.show(b.dataset.t as Tab); else if (b.dataset.do) this.act(b.dataset.do, b.dataset.arg ?? ''); });
     addEventListener('keydown', e => { if (e.code === 'KeyP') this.toggle(); else if (e.code === 'Escape' && this.open) this.toggle(false); });
   }
@@ -25,6 +26,11 @@ export class Phone {
     this.tab = t; this.el.querySelectorAll<HTMLButtonElement>('.ph-tabs button').forEach(b => b.classList.toggle('on', b.dataset.t === t)); const g = this.g, B = this.body();
     if (t === 'carte') { B.innerHTML = `<canvas class="ph-map"></canvas><div class="ph-row"><button data-do="zoom" data-arg="1.4">＋</button><button data-do="zoom" data-arg="0.7">－</button><button data-do="center">◎ Moi</button><button data-do="clear">Effacer le repère</button></div><div class="ph-legend">🔵 vous · 🟦 vos voitures · 🟪 receleur · 🩵 planques · 🟧 coups préparés · 🟨 mission · 🟩 maisons repérées · 🔷 gendarmerie · 📍 repère (toucher la carte)</div>`; this.cv = B.querySelector('canvas')!; this.bindMap(); this.drawMap(); return; }
     if (t === 'messages') { const L = g.inbox.list; L.forEach(m => (m.read = true)); B.innerHTML = L.length ? L.map(m => `<div class="ph-card"><div class="ph-from">${esc(m.from)} <span>jour ${m.day} · ${m.hour} h</span></div><div>${esc(m.text)}</div>${m.kind === 'tuyau' && !m.done ? `<button data-do="tuyau" data-arg="${m.id}">Accepter le tuyau</button>` : ''}${m.kind === 'planque' && !m.done ? `<button data-do="planque" data-arg="${m.id}">Localiser</button>` : ''}${m.done ? '<div class="ph-ok">✔ fait</div>' : ''}</div>`).join('') : '<p class="ph-empty">Aucun message pour l\'instant.</p>'; return; }
+    if (t === 'moi') { const S = g.skills, rep = g.missions.rep; const bar = (v: number, col: string) => `<div class="ph-bar"><i style="width:${Math.round(v * 100)}%;background:${col}"></i></div>`;
+      const next = RANKS.find(([r]) => r > rep); const ups = [...g.uw.ups].map(k => { const [i, u] = k.split(':'); return `${g.uw.dens[+i]?.nom.split(' (')[0] ?? 'Planque'} : ${{ lit: 'vrai lit', coffre: 'coffre-fort', garage: 'garage fermé' }[u] ?? u}`; });
+      B.innerHTML = `<div class="ph-card"><b>Réputation dans le milieu : ${esc(rankOf(rep))}</b>${bar(rep / 100, '#d4a017')}<div class="ph-sub">${Math.round(rep)} / 100${next ? ` · prochain rang « ${next[1]} » à ${next[0]}` : ''} · tuyau du fourgon à 20, grand coup à 50</div></div>`
+        + (Object.keys(SKILLS) as Skill[]).map(k => `<div class="ph-card"><b>${SKILLS[k].nom}</b> <span class="ph-sub">niveau ${S.level(k)} / 5</span>${bar(S.progress(k), '#4aa3e0')}<div class="ph-sub">${S.level(k) ? SKILLS[k].effet(S.level(k)) : 'progresse en pratiquant'}</div></div>`).join('')
+        + `<div class="ph-card"><b>Planques</b><div class="ph-sub">${ups.length ? ups.map(esc).join(' · ') : 'Aucun équipement (lit, coffre-fort, garage : à acheter sur place)'}</div></div><div class="ph-card"><b>Bilan</b><div class="ph-sub">${g.heists.done} coup${g.heists.done > 1 ? 's' : ''} réussi${g.heists.done > 1 ? 's' : ''}${g.heists.grand ? ' · LE GRAND COUP est fait' : ' · le grand coup reste à faire'} · ${g.prisonDays} jour${g.prisonDays > 1 ? 's' : ''} de prison · ${g.money} €</div></div>`; return; }
     if (t === 'dossiers') { const D = g.enquete.open_; B.innerHTML = D.length ? D.map(d => `<div class="ph-card"><b>${esc(d.titre)}</b> <span class="ph-sub">jour ${d.jour}${d.mandat ? ' · <b style="color:#ff6b6b">MANDAT D\'ARRÊT</b>' : ''}</span><div class="ph-bar"><i style="width:${Math.round(d.preuves)}%;background:${d.preuves >= 60 ? '#e05a5a' : '#e0a040'}"></i></div><div class="ph-sub">Preuves ${Math.round(d.preuves)} %${d.vehicule ? ` · piste : ${esc(d.vehicule)} (la brûler efface la piste)` : ''}${d.tenue ? ` · tenue : ${esc(d.tenue)}` : ''}</div></div>`).join('') : '<p class="ph-empty">Aucune enquête en cours contre vous.</p>'; return; }
     if (t === 'contacts') { const crew = [...g.heists.crew] as Role[]; const f = g.uw.fence;
       B.innerHTML = `<div class="ph-card"><b>Le receleur</b><div class="ph-sub">Box de garage (lieu fictif) · reçoit de 20 h à 6 h</div>${f ? '<button data-do="goto" data-arg="fence">Localiser</button>' : ''}</div>`

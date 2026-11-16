@@ -83,7 +83,7 @@ game.avatars = avatars; game.debris = new Debris(scene); const phone = new Phone
 const neutres1 = neutres0.filter(s => ![game.uw.fence, ...game.uw.dens].some(d => d && d.x === s.x && d.z === s.z));
 game.arson.attach(scene, (x, z) => { const i = graph.nearest(x, z, 60, true); if (i < 0) return null; const [px, pz] = graph.pts[i]; const e = graph.adj[i][0]; const q = e ? graph.pts[e.to] : [px + 1, pz]; const h = Math.atan2(q[0] - px, q[1] - pz); return { x: px + Math.cos(h) * 2.5, z: pz - Math.sin(h) * 2.5, h }; });
 game.heists.setup(neutres1, scene, game.uw.roadDist); const heistSpots = game.heists.targets.map(t => t.id); void heistSpots;
-const neutres = neutres1.filter((_, i) => i !== Math.floor(neutres1.length * 0.3) && i !== Math.floor(neutres1.length * 0.7)); game.kid.setup(neutres);
+const neutres = neutres1.filter((_, i) => ![0.3, 0.5, 0.7].some(k => i === Math.floor(neutres1.length * k))); game.kid.setup(neutres);
 const mpanel = new MissionsPanel(); game.onOffers = () => mpanel.setOffers(game.offers, game.missions.rep, game.missions.active?.offer.titre ?? '');
 mpanel.onAccept = o => game.startOffer(o); mpanel.onAbandon = () => { game.missions.abandon(); game.boarded = null; game.onOffers(); }; game.onMissionsKey = () => mpanel.toggle();
 game.attachMissions({ commerces: spotsOf(['supermarket', 'bakery', 'butcher', 'greengrocer', 'pastry', 'variety_store', 'clothes', 'florist', 'books', 'convenience']), bureaux: spotsOf(['bank', 'estate_agent', 'employment_agency', 'insurance', 'lawyer', 'townhall', 'government', 'accountant', 'company']), neutres, nodes });

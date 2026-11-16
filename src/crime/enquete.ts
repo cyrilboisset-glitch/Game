@@ -23,9 +23,9 @@ export class Enquete {
   /** Témoignages, images de vidéosurveillance… : ajoute des preuves au dossier ouvert le plus récent du type. */
   add(kind: Kind, v: number) { const d = [...this.dossiers].reverse().find(q => !q.clos && q.kind === kind); if (d) d.preuves = Math.min(100, d.preuves + v); }
   /** Avance le temps. Les pistes (véhicule encore en circulation) font monter les preuves ; à l'échéance : mandat (≥ 60) ou classement. */
-  tick(h: number, day: number, hour: number) {
+  tick(h: number, day: number, hour: number, hiddenCar: string | null = null) {
     const now = Enquete.abs(day, hour); const ev: { mandat: Dossier[]; classes: Dossier[] } = { mandat: [], classes: [] };
-    for (const d of this.dossiers) { if (d.clos || d.mandat) continue; d.preuves = Math.min(100, d.preuves + (d.vehicule ? 1.2 : 0) * h + (d.tenue ? 0.4 : 0) * h);
+    for (const d of this.dossiers) { if (d.clos || d.mandat) continue; d.preuves = Math.min(100, d.preuves + (d.vehicule && d.vehicule !== hiddenCar ? 1.2 : 0) * h + (d.tenue ? 0.4 : 0) * h);
       if (now >= d.echeance) { if (d.preuves >= 60) { d.mandat = true; ev.mandat.push(d); } else { d.clos = true; ev.classes.push(d); } } }
     return ev;
   }

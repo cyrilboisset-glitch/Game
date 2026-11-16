@@ -8,6 +8,7 @@ import type { Npc } from '../npc/identity';
 import type { AvatarInstance } from '../player/avatar';
 import { rollLoot, BULKY, ITEMS } from '../crime/loot';
 import { SPECS } from '../vehicles/specs';
+import { alarmK } from '../crime/skills';
 
 /** Habitant présent lors d'une intrusion (toujours adulte : on n'entre jamais là où des enfants sont à la maison). */
 interface Occupant { npc: Npc; state: 'dort' | 'eveille' | 'soumis' | 'ko'; callT: number; called: boolean; robbed: boolean; x: number; z: number; av?: AvatarInstance; }
@@ -50,7 +51,7 @@ export class InteriorManager {
   enterQuiet(e: Entry) {
     const poi = this.index.poi(e.bi); const o = this.g.uw.occ(e.bi); if (o && o.minors.length) { this.g.hud.toast('Des enfants sont à la maison : vous renoncez.', 3); return; }
     this.forced = true; this.noisy = false; this.poi = poi; this.g.crime(12, 3);
-    if (Math.random() < (poi ? 0.2 : 0.06)) { this.g.crime(20, 70); this.g.sfx('alarm'); this.g.hud.toast('La serrure cède… mais une ALARME se déclenche !'); } else { this.g.sfx('door'); this.g.hud.toast('La serrure cède sans bruit.'); }
+    if (Math.random() < (poi ? 0.2 : 0.06) * alarmK(this.g.skills.level('crochetage'))) { this.g.crime(20, 70); this.g.sfx('alarm'); this.g.hud.toast('La serrure cède… mais une ALARME se déclenche !'); } else { this.g.sfx('door'); this.g.hud.toast('La serrure cède sans bruit.'); }
     this.transition(() => this.enter(e));
   }
   private transition(fn: () => void) { this.fade = { t: 0.5, fn }; this.g.hud.veil(1); }
@@ -98,7 +99,7 @@ export class InteriorManager {
   private holdup(s: Spot) {
     const g = this.g, bank = this.layout!.kind === 'banque'; g.looted.add(`holdup:${this.bi}:${g.clock.day}`); g.player.punch();
     const m = bank ? rr(1800, 4200) : this.layout!.kind === 'supermarche' ? rr(300, 900) : rr(120, 450); g.money += m; g.sfx('alarm');
-    g.heat.value = Math.max(g.heat.value, bank ? 62 : 42); g.crimeFile('holdup', bank ? 1.3 : 1); g.report(-1 - this.bi, 4, 10, { outfit: g.hooded && g.heists.cagoule ? null : g.outfitId(), vehicle: null, face: !g.hooded });
+    g.heat.value = Math.max(g.heat.value, bank ? 62 : 42); g.crimeFile('holdup', bank ? 1.3 : 1); g.repUp(bank ? 6 : 3); g.report(-1 - this.bi, 4, 10, { outfit: g.hooded && g.heists.cagoule ? null : g.outfitId(), vehicle: null, face: !g.hooded });
     g.hud.toast(`« La caisse, vite ! » — ${s.kind === 'coffre' ? 'le guichetier' : 'le personnel'} vous tend ${m} €. L'alarme silencieuse est déclenchée.`, 5); void s;
   }
   /** Argent du foyer + clés de voiture : le véhicule du foyer vous attend devant (home-jacking). */

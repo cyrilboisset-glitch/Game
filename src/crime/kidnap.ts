@@ -30,7 +30,7 @@ export class Kidnapping {
       g.mode = 'car'; g.player.root.visible = false; g.uw.loadTrunk(); g.hud.toast(`${n.prenom} monte à l'arrière sous la menace. Direction une planque à vous.`, 4); return true; }
     const k = this.k; if (k && k.stage === 'rancon' && k.drop && Math.hypot(g.pos.x - k.drop.x, g.pos.z - k.drop.z) < 8 && g.mode === 'foot') {
       if (!g.uw.take('billets')) return true; const extra = Math.max(0, Math.round(k.ransom / 1600) - 1); for (let i = 0; i < extra; i++) g.uw.bag.push('billets');
-      k.stage = 'paye'; g.sfx('coin'); if (k.trap) { g.heat.value = Math.max(g.heat.value, 70); g.hud.toast('C\'était un piège : les gendarmes surgissent !', 4); g.sfx('alarm'); } else g.hud.toast('Rançon récupérée. Relâchez l\'otage depuis la planque, puis comptez le magot.', 5);
+      k.stage = 'paye'; g.sfx('coin'); g.repUp(8); if (k.trap) { g.heat.value = Math.max(g.heat.value, 70); g.hud.toast('C\'était un piège : les gendarmes surgissent !', 4); g.sfx('alarm'); } else g.hud.toast('Rançon récupérée. Relâchez l\'otage depuis la planque, puis comptez le magot.', 5);
       return true; }
     return false;
   }

@@ -12,7 +12,7 @@ export const ROLES: Record<Role, { nom: string; titre: string; part: number; pri
   guetteur: { nom: 'La Fouine', titre: 'guetteur', part: 0.15, prix: 60, effet: 'retarde l\'alarme et coupe la vidéosurveillance' },
   grosbras: { nom: 'Le Taiseux', titre: 'gros bras', part: 0.2, prix: 60, effet: 'maîtrise les gardes, remplit les sacs plus vite' },
 };
-export interface Target { id: 'entrepot' | 'fourgon'; nom: string; x: number; z: number; win: [number, number]; bags: number; needsGun: boolean; needsMuscle: boolean; }
+export interface Target { rep?: number; id: 'entrepot' | 'fourgon' | 'grandcoup'; nom: string; x: number; z: number; win: [number, number]; bags: number; needsGun: boolean; needsMuscle: boolean; }
 export interface Plan { target: Target; repere: number; phase: 'prep' | 'action' | 'fuite'; t: number; alarm: number; complication: boolean; }
 export const BAG_VALUE = 1600;
 const inWin = (h: number, [a, b]: [number, number]) => (a < b ? h >= a && h < b : h >= a || h < b);
@@ -20,13 +20,15 @@ const fmt = (h: number) => `${Math.floor(h)} h`;
 type Opt = { label: string; run: () => void };
 
 export class Heists {
-  crew = new Set<Role>(); plan: Plan | null = null; cagoule = false; targets: Target[] = []; private van: number | null = null; private escapeT = 0; done = 0;
+  grand = false; crew = new Set<Role>(); plan: Plan | null = null; cagoule = false; targets: Target[] = []; private van: number | null = null; private escapeT = 0; done = 0;
   constructor(private g: Game) {}
   setup(neutres: Spot[], scene: THREE.Scene, roadDist: (x: number, z: number) => number) {
-    const [a, b] = [neutres[Math.floor(neutres.length * 0.3)], neutres[Math.floor(neutres.length * 0.7)]]; if (!a || !b) return;
+    const [a, b, c] = [neutres[Math.floor(neutres.length * 0.3)], neutres[Math.floor(neutres.length * 0.7)], neutres[Math.floor(neutres.length * 0.5)]]; if (!a || !b) return;
     const s = siteFor(a.x, a.z, roadDist, (x, z) => this.g.coll.resolve({ x, z }, 3.2).depth > 0); const h = buildHut(scene, s.x, s.z, s.h, 'box', 0x3a7bd5); this.g.uw.huts.push(h.box);
     this.targets = [{ id: 'entrepot', nom: `Entrepôt de la zone (fictif)`, x: h.door.x, z: h.door.z, win: [22, 4], bags: 2, needsGun: false, needsMuscle: false },
-      { id: 'fourgon', nom: 'Fourgon de transport de fonds (fictif)', x: b.x, z: b.z, win: [10, 11.5], bags: 4, needsGun: true, needsMuscle: true }];
+      { id: 'fourgon', nom: 'Fourgon de transport de fonds (fictif)', x: b.x, z: b.z, win: [10, 11.5], bags: 4, needsGun: true, needsMuscle: true, rep: 20 }];
+    // le grand coup : salle des coffres d'une société de transfert de fonds (fictive), la nuit, avec toute l'équipe
+    if (c) { const s2 = siteFor(c.x, c.z, roadDist, (x, z) => this.g.coll.resolve({ x, z }, 3.2).depth > 0); const h2 = buildHut(scene, s2.x, s2.z, s2.h, 'box', 0xd4a017); this.g.uw.huts.push(h2.box); this.targets.push({ id: 'grandcoup', nom: 'Salle des coffres de Transfonds (fictive)', x: h2.door.x, z: h2.door.z, win: [2, 4], bags: 10, needsGun: true, needsMuscle: true, rep: 50 }); }
   }
   /** Tuyau reçu par message (gratuit). */
   acceptTip(id: string) { if (this.plan) return false; const t = this.targets.find(q => q.id === id); if (!t) return false; this.plan = { target: t, repere: 0, phase: 'prep', t: 0, alarm: 0, complication: false }; return true; }
@@ -34,7 +36,7 @@ export class Heists {
   /** Options ajoutées au menu du receleur. */
   fenceOpts(buy: (label: string, cost: number, fn: () => void) => Opt): Opt[] {
     const g = this.g, o: Opt[] = [];
-    if (!this.plan) for (const t of this.targets) o.push(buy(`Tuyau : ${t.nom} (${fmt(t.win[0])}–${fmt(t.win[1])})`, t.id === 'fourgon' ? 250 : 100, () => { this.plan = { target: t, repere: 0, phase: 'prep', t: 0, alarm: 0, complication: false }; g.hud.toast(`Tuyau : ${t.nom}. Repérez les lieux, équipez-vous, recrutez si besoin (marqué sur la carte).`, 5); }));
+    if (!this.plan) for (const t of this.targets) if ((t.rep ?? 0) > g.missions.rep) o.push({ label: `Tuyau : ${t.nom} — réputation ${t.rep} requise (vous : ${Math.round(g.missions.rep)})`, run: () => g.hud.toast('« Je ne file pas ce genre de tuyau à n\'importe qui. Fais tes preuves. »', 3) }); else o.push(buy(`Tuyau : ${t.nom} (${fmt(t.win[0])}–${fmt(t.win[1])})`, t.id === 'grandcoup' ? 1500 : t.id === 'fourgon' ? 250 : 100, () => { this.plan = { target: t, repere: 0, phase: 'prep', t: 0, alarm: 0, complication: false }; g.hud.toast(`Tuyau : ${t.nom}. Repérez les lieux, équipez-vous, recrutez si besoin (marqué sur la carte).`, 5); }));
     for (const r of Object.keys(ROLES) as Role[]) if (!this.crew.has(r)) { const R = ROLES[r]; o.push(buy(`Recruter ${R.nom} (${R.titre}, ${Math.round(R.part * 100)} % du magot)`, R.prix, () => { this.crew.add(r); g.hud.toast(`${R.nom} est dans le coup : il ${R.effet}.`, 4); })); }
     if (!this.cagoule) o.push(buy('Cagoule', 15, () => { this.cagoule = true; g.hud.toast('Cagoule : V pour la mettre (visage et tenue difficiles à décrire).', 3); }));
     if (!g.enquete.gants) o.push(buy('Gants', 10, () => { g.enquete.gants = true; g.hud.toast('Gants : moins de traces pour les enquêteurs.', 3); }));
@@ -52,7 +54,7 @@ export class Heists {
   /** Cible à afficher (balise, minimap). */
   marker() { const p = this.plan; if (!p || p.phase === 'fuite') return null; return { x: p.target.x, z: p.target.z, label: p.phase === 'action' ? 'Braquage en cours' : `${p.target.nom}${p.repere >= 1 ? ' (repéré)' : ' — à repérer'}` }; }
   private near(r: number) { const p = this.plan; if (!p) return false; return Math.hypot(this.g.pos.x - p.target.x, this.g.pos.z - p.target.z) < r; }
-  private missing(): string[] { const g = this.g, t = this.plan!.target, m: string[] = []; if (!inWin(g.clock.hour, t.win)) m.push(`revenir entre ${fmt(t.win[0])} et ${fmt(t.win[1])}`); if (g.weapon === 'poings') m.push('une arme en main'); if (t.needsGun && g.weapon !== 'pistolet') m.push('le pistolet en main'); if (t.needsMuscle && !this.crew.has('grosbras')) m.push('un gros bras'); if (g.mode !== 'foot') m.push('être à pied'); return m; }
+  private missing(): string[] { const g = this.g, t = this.plan!.target, m: string[] = []; if (!inWin(g.clock.hour, t.win)) m.push(`revenir entre ${fmt(t.win[0])} et ${fmt(t.win[1])}`); if (g.weapon === 'poings') m.push('une arme en main'); if (t.needsGun && g.weapon !== 'pistolet') m.push('le pistolet en main'); if (t.needsMuscle && !this.crew.has('grosbras')) m.push('un gros bras'); if (t.id === 'grandcoup') { if (this.crew.size < 3) m.push('toute l\'équipe (chauffeur, guetteur, gros bras)'); if (g.skills.level('crochetage') < 3) m.push('crochetage niveau 3'); } if (g.mode !== 'foot') m.push('être à pied'); return m; }
   prompt(): string | null {
     const p = this.plan; if (!p) return null;
     if (p.phase === 'action') { const left = Math.max(0, this.lootTime() - p.t); return p.t < 5 ? `Braquage : maîtriser les gardes… ${Math.round(p.t / 5 * 100)} %` : `Remplir les sacs… ${Math.round((1 - left / (this.lootTime() - 5)) * 100)} % — restez sur place${p.alarm > 0 && p.t > p.alarm ? ' · ALARME !' : ''}`; }
@@ -84,7 +86,8 @@ export class Heists {
     const g = this.g, p = this.plan!; let added = 0; for (let i = 0; i < p.target.bags; i++) if (fits(g.uw.bag, 'billets')) { g.uw.bag.push('billets'); added++; }
     const extra = p.target.bags - added; if (extra > 0) { const carNear = Math.hypot(g.car.pos.x - g.pos.x, g.car.pos.z - g.pos.z) < 30; if (carNear) for (let i = 0; i < extra; i++) g.uw.trunk.push('billets'); }
     g.heat.value = Math.max(g.heat.value, 55); g.crimeFile('braquage', (g.hooded && this.cagoule ? 0.5 : 1.3) * (this.crew.has('guetteur') ? 0.7 : 1));
-    g.hud.toast(`${added + (extra > 0 ? extra : 0)} sacs de billets ! Filez à la planque pour compter le magot.`, 5); this.plan = null; this.escapeT = 60;
+    g.repUp(p.target.id === 'grandcoup' ? 25 : p.target.id === 'fourgon' ? 12 : 8);
+    g.hud.toast(p.target.id === 'grandcoup' ? `LE GRAND COUP ! ${p.target.bags} sacs de billets… Il faut maintenant disparaître et compter le magot à la planque.` : `${added + (extra > 0 ? extra : 0)} sacs de billets ! Filez à la planque pour compter le magot.`, 6); if (p.target.id === 'grandcoup') this.grand = true; this.plan = null; this.escapeT = 60;
   }
   /** Le fourgon fictif n'est là que pendant sa fenêtre horaire. */
   private vanUpdate() {
@@ -94,6 +97,6 @@ export class Heists {
   private removeVan() { if (this.van === null) return; const v = this.g.vehicles.list.find(q => q.id === this.van); if (v) this.g.vehicles.remove(v); this.van = null; }
   /** Arrestation : un complice peut balancer. */
   arrested() { if (this.crew.size && Math.random() < 0.3) { this.g.enquete.add('braquage', 25); this.g.hud.toast(`${ROLES[[...this.crew][0]].nom} a parlé aux enquêteurs…`, 4); } this.crew.clear(); this.plan = null; this.escapeT = 0; }
-  save() { return { crew: [...this.crew], cagoule: this.cagoule, done: this.done }; }
-  load(s: any) { if (!s) return; this.crew = new Set(s.crew ?? []); this.cagoule = !!s.cagoule; this.done = s.done ?? 0; }
+  save() { return { crew: [...this.crew], cagoule: this.cagoule, done: this.done, grand: this.grand }; }
+  load(s: any) { if (!s) return; this.crew = new Set(s.crew ?? []); this.cagoule = !!s.cagoule; this.done = s.done ?? 0; this.grand = !!s.grand; }
 }

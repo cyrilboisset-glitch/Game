@@ -14,12 +14,16 @@ import { circleVsBox } from '../world/solids';
 export interface Cache { x: number; z: number; what: string; n: number; desc: string; }
 export interface Den { x: number; z: number; nom: string; prix: number; }
 type Opt = { label: string; run: () => void };
-const PICK_TIME = 4.5;
+import { pickTime } from './skills';
 const CACHE_KINDS = ['argent', 'argent', 'argent', 'argent', 'argent', 'trousse', 'trousse', 'trousse', 'munitions', 'munitions', 'munitions', 'crochet', 'crochet', 'crochet', 'batte', 'barre', 'cle', 'bouteille', 'pistolet', 'pistolet', 'bijoux', 'montre'];
 const HIDING = ['un sac planqué sous une haie', 'une boîte cachée derrière un coffret électrique', 'un sac au fond d\'un fossé', 'une boîte sous une dalle descellée', 'un sac coincé derrière une poubelle', 'un paquet glissé sous un buisson'];
 
 export class Underworld {
-  bonusUntil = 0; bag: string[] = []; trunk: string[] = []; stash: string[] = []; ammo = 0; tools = new Set<string>(); kits = 0; bleeding = false;
+  carHidden = false;
+  /** La planque où l'on se trouve possède cet équipement. */
+  denHas(k: string) { return this.dens.some((d, i) => this.ups.has(`${i}:${k}`) && Math.hypot(d.x - this.g.player.pos.x, d.z - this.g.player.pos.z) < 10); }
+  get pickT() { return pickTime(this.g.skills.level('crochetage')); }
+  ups = new Set<string>(); bonusUntil = 0; bag: string[] = []; trunk: string[] = []; stash: string[] = []; ammo = 0; tools = new Set<string>(); kits = 0; bleeding = false;
   owned = new Set<number>(); scouted = new Map<number, string>(); evacuated = new Map<number, number>();
   fence: Den | null = null; dens: Den[] = []; caches: Cache[] = []; inDen = false; safeSleep = false;
   pick: { e: Entry; t: number; x: number; z: number } | null = null; sel = 0;
@@ -100,7 +104,7 @@ export class Underworld {
       const carNear = Math.hypot(g.car.pos.x - P.x, g.car.pos.z - P.z) < 15; const nb = (l: string[]) => l.filter(i => i !== 'billets'); const goods = carNear ? [...nb(this.bag), ...nb(this.trunk)] : nb(this.bag); let price = fencePrice(goods, g.heat.stars); if (price !== null && this.bonusUntil > g.clock.day * 24 + g.clock.hour && goods.some(i => ['tele', 'portable', 'console', 'ecran', 'tablette', 'telephone'].includes(i))) price = Math.round(price * 1.2);
       const buy = (label: string, cost: number, fn: () => void): Opt => ({ label: `${label} — ${cost} €`, run: () => { if (g.money < cost) return g.hud.toast(`Il vous faut ${cost} €.`); g.money -= cost; fn(); g.sfx('coin'); } });
       const opts: Opt[] = [];
-      if (goods.length) opts.push({ label: price === null ? 'Vendre : « Trop chaud, reviens quand ça se sera calmé »' : `Vendre ${goods.length} objet${goods.length > 1 ? 's' : ''}${carNear && this.trunk.length ? ' (sac + coffre)' : ''} — ${price} €`, run: () => { if (price === null) return g.hud.toast('« Tu as la gendarmerie aux fesses. Dégage. »', 3); g.money += price; g.hud.toast(`Le receleur prend ${summary(goods)} : +${price} €.`, 4); this.bag = this.bag.filter(i => i === 'billets'); if (carNear) this.trunk = this.trunk.filter(i => i === 'billets'); g.sfx('coin'); } });
+      if (goods.length) opts.push({ label: price === null ? 'Vendre : « Trop chaud, reviens quand ça se sera calmé »' : `Vendre ${goods.length} objet${goods.length > 1 ? 's' : ''}${carNear && this.trunk.length ? ' (sac + coffre)' : ''} — ${price} €`, run: () => { if (price === null) return g.hud.toast('« Tu as la gendarmerie aux fesses. Dégage. »', 3); g.money += price; g.repUp(1 + Math.floor(price / 400)); g.hud.toast(`Le receleur prend ${summary(goods)} : +${price} €.`, 4); this.bag = this.bag.filter(i => i === 'billets'); if (carNear) this.trunk = this.trunk.filter(i => i === 'billets'); g.sfx('coin'); } });
       if (!this.tools.has('crochet')) opts.push(buy('Crochet de serrurier', 40, () => { this.tools.add('crochet'); g.hud.toast('Crochet acheté : les portes verrouillées s\'ouvrent sans bruit (E, sans bouger).', 4); }));
       opts.push(buy('Trousse de soins', 25, () => { this.kits++; }));
       opts.push(buy('12 balles', 60, () => { this.ammo += 12; }));
@@ -111,6 +115,9 @@ export class Underworld {
     for (let i = 0; i < this.dens.length; i++) { const d = this.dens[i]; if (!near(d)) continue;
       if (!this.owned.has(i)) return { title: d.nom, opts: [{ label: d.prix ? `Louer (${d.prix} €)` : 'S\'y installer (squat)', run: () => { if (g.money < d.prix) return g.hud.toast(`Il vous faut ${d.prix} €.`); g.money -= d.prix; this.owned.add(i); g.hud.toast('C\'est votre planque : butin à l\'abri, sommeil tranquille, on vous oublie plus vite.', 4); } }] };
       const opts: Opt[] = [{ label: 'Dormir à l\'abri', run: () => { g.sleeping = true; this.safeSleep = true; g.hud.toast('Vous dormez dans votre planque… (R pour vous réveiller)'); } }];
+      // équipement de la planque
+      const up = (k: string, label: string, cost: number, msg: string) => { if (!this.ups.has(`${i}:${k}`)) opts.push({ label: `Équiper : ${label} — ${cost} €`, run: () => { if (g.money < cost) return g.hud.toast(`Il vous faut ${cost} €.`); g.money -= cost; this.ups.add(`${i}:${k}`); g.sfx('coin'); g.hud.toast(msg, 4); } }); };
+      up('lit', 'un vrai lit', 80, 'Vrai lit : on récupère bien plus vite en dormant ici.'); up('coffre', 'un coffre-fort scellé', 200, 'Coffre-fort : le butin caché ici échappe aux perquisitions.'); if (d.prix > 0) up('garage', 'le garage fermé', 350, 'Garage fermé : une voiture garée ici échappe aux enquêteurs et se répare doucement.');
       if (this.bag.length) opts.push({ label: `Cacher le sac (${this.bag.length} objet${this.bag.length > 1 ? 's' : ''})`, run: () => { this.stash.push(...this.bag); this.bag = []; g.hud.toast('Butin caché dans la planque.'); } });
       if (this.trunk.length && Math.hypot(g.car.pos.x - P.x, g.car.pos.z - P.z) < 15) opts.push({ label: `Vider le coffre (${this.trunk.length})`, run: () => { this.stash.push(...this.trunk); this.trunk = []; g.hud.toast('Coffre vidé dans la planque.'); } });
       if (this.stash.length) opts.push({ label: `Reprendre le butin (${this.stash.length} : ${summary(this.stash).slice(0, 40)})`, run: () => { const keep: string[] = []; for (const it of this.stash) if (!this.take(it)) keep.push(it); this.stash = keep; } });
@@ -124,7 +131,7 @@ export class Underworld {
   /** Prompt contextuel prioritaire (cache, receleur, planque, crochetage, écoute). */
   prompt(): string | null {
     const g = this.g, P = g.player.pos;
-    if (this.pick) return `Crochetage… ${Math.round(this.pick.t / PICK_TIME * 100)} % — ne bougez pas`;
+    if (this.pick) return `Crochetage… ${Math.round(this.pick.t / this.pickT * 100)} % — ne bougez pas`;
     const c = this.nearCache(); if (c) return `E : fouiller ${c.desc}`;
     const m = this.options(); if (m) { if (!m.opts.length) return m.title; this.sel %= m.opts.length; return `${m.title} — ${m.opts[this.sel].label}${m.opts.length > 1 ? ' · N : suivant' : ''} · B/E : valider`; }
     if (this.listenT > 0.3 && this.listenBi >= 0) return `Vous écoutez à la porte… ${Math.min(100, Math.round(this.listenT / 2 * 100))} %`;
@@ -158,14 +165,15 @@ export class Underworld {
     const g = this.g, P = g.player.pos; this.shotCd -= dt;
     if (this.tracer && this.tracerT > 0 && (this.tracerT -= dt) <= 0) this.tracer.visible = false;
     // crochetage : immobile pendant PICK_TIME secondes
-    if (this.pick) { if (Math.hypot(P.x - this.pick.x, P.z - this.pick.z) > 0.6 || g.mode !== 'foot') { this.pick = null; g.hud.toast('Crochetage interrompu.', 1.5); } else if ((this.pick.t += dt) >= PICK_TIME) { const e = this.pick.e; this.pick = null; g.interior.enterQuiet(e); } }
+    if (this.pick) { if (Math.hypot(P.x - this.pick.x, P.z - this.pick.z) > 0.6 || g.mode !== 'foot') { this.pick = null; g.hud.toast('Crochetage interrompu.', 1.5); } else if ((this.pick.t += dt) >= this.pickT) { const e = this.pick.e; this.pick = null; const up = g.skills.gain('crochetage', 1); if (up) g.levelUp('crochetage', up); g.interior.enterQuiet(e); } }
     // écoute à la porte d'un logement (accroupi)
     const e = g.mode === 'foot' && g.crouch && !g.interior.inside ? g.interior.index.find(P.x, P.z) : null; const bi = e && this.residents.has(e.bi) ? e.bi : -1;
     if (bi >= 0 && bi === this.listenBi) { if (this.listenT < 2 && (this.listenT += dt) >= 2) this.scout(bi); } else { this.listenBi = bi; this.listenT = 0; }
     // blessures : saignement et soin automatique au repos dans la planque
     if (this.bleeding && !g.sleeping) g.needs.s.sante = Math.max(0, g.needs.s.sante - 0.22 * dt);
     this.inDen = this.dens.some((d, i) => this.owned.has(i) && Math.hypot(d.x - P.x, d.z - P.z) < 10);
-    if (g.sleeping && this.inDen) { this.bleeding = false; g.needs.s.sante = Math.min(100, g.needs.s.sante + 0.4 * dt); }
+    if (g.sleeping && this.inDen) { this.bleeding = false; g.needs.s.sante = Math.min(100, g.needs.s.sante + 0.4 * dt); if (this.denHas('lit')) g.needs.s.energie = Math.min(100, g.needs.s.energie + 1.4 * dt); }
+    this.carHidden = g.mode === 'foot' && this.dens.some((d, i) => this.ups.has(`${i}:garage`) && Math.hypot(d.x - g.car.pos.x, d.z - g.car.pos.z) < 14); if (this.carHidden) g.car.hp = Math.min(g.car.spec.hp, g.car.hp + 0.4 * dt);
     if (!g.sleeping) this.safeSleep = false;
     // blessés évacués par les secours au bout de quelques secondes
     for (const [id, t] of this.evacT) { if ((t - dt) <= 0) { this.evacT.delete(id); g.npcCtl.map.delete(id); } else this.evacT.set(id, t - dt); }
@@ -178,8 +186,8 @@ export class Underworld {
     const g = this.g, l = this.residents.get(bi)!; const o = this.occ(bi)!; const f = nextEmpty(l, (n, d, h) => g.sim!.stateAt(n, d, h, false), g.clock.day, g.clock.hour);
     const note = `${listenReport(o)}${f ? ' · ' + f.text : ''}`; this.scouted.set(this.skey(bi), note); g.hud.toast(`Repérage (famille ${l[0].nom}) : ${note}.`, 5);
   }
-  save() { return { bag: this.bag, trunk: this.trunk, stash: this.stash, ammo: this.ammo, tools: [...this.tools], kits: this.kits, bleeding: this.bleeding, owned: [...this.owned], scouted: [...this.scouted] }; }
-  load(s: any) { if (!s) return; this.bag = s.bag ?? []; this.trunk = s.trunk ?? []; this.stash = s.stash ?? []; this.ammo = s.ammo ?? 0; this.tools = new Set(s.tools ?? []); this.kits = s.kits ?? 0; this.bleeding = !!s.bleeding; this.owned = new Set(s.owned ?? []); this.scouted = new Map(s.scouted ?? []); this.cacheMeshes.forEach((m, i) => { m.visible = !this.g.looted.has('cache:' + i); }); }
+  save() { return { bag: this.bag, trunk: this.trunk, stash: this.stash, ammo: this.ammo, tools: [...this.tools], kits: this.kits, bleeding: this.bleeding, owned: [...this.owned], scouted: [...this.scouted], ups: [...this.ups] }; }
+  load(s: any) { if (!s) return; this.bag = s.bag ?? []; this.trunk = s.trunk ?? []; this.stash = s.stash ?? []; this.ammo = s.ammo ?? 0; this.tools = new Set(s.tools ?? []); this.kits = s.kits ?? 0; this.bleeding = !!s.bleeding; this.owned = new Set(s.owned ?? []); this.scouted = new Map(s.scouted ?? []); this.ups = new Set(s.ups ?? []); this.cacheMeshes.forEach((m, i) => { m.visible = !this.g.looted.has('cache:' + i); }); }
   /** Repères de la minimap. */
   markers() { const out: { x: number; z: number; c: string }[] = []; if (this.fence) out.push({ x: this.fence.x, z: this.fence.z, c: '#a66bff' }); this.dens.forEach((d, i) => out.push({ x: d.x, z: d.z, c: this.owned.has(i) ? '#3ad1ff' : '#4a8fb0' })); return out; }
 }
