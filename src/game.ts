@@ -242,7 +242,7 @@ export class Game {
     else this.hud.toast('Véhicule déjà au maximum.');
   }
   attachNpcs(list: Npc[], sim: NpcSim) { this.sim = sim; list.forEach(n => this.npcs.set(n.id, n)); }
-  observe(id: number) { const n = this.npcs.get(id); if (!n) return; if (this.sleeping) this.wake(); this.observed = n; this.clock.scale = 1; this.hud.toast(`Observation : ${n.prenom} ${n.nom} (Échap pour quitter)`, 3); }
+  observe(id: number) { const n = this.npcs.get(id); if (!n) return; if (this.sleeping) this.wake(); this.observed = n; this.clock.scale = 1; this.hud.toast(`Observation : ${n.prenom} ${n.nom} (${this.input.touch ? 'bouton bleu « Quitter »' : 'Échap'} pour quitter)`, 3); }
   stopObserving() { this.observed = null; this.clock.scale = 1; this.hud.prompt(''); }
   setSpeed(x: number) { this.clock.scale = x; }
   nearNpc(maxD = this.input.touch ? 3.3 : 2.8): NpcState | null { let b: NpcState | null = null, bd = maxD; for (const s of this.states.values()) { if (s.kind !== 'marche' && s.kind !== 'dehors') continue; const d = Math.hypot(s.x - this.player.pos.x, s.z - this.player.pos.z); if (d < bd) { bd = d; b = s; } } return b; }
@@ -268,7 +268,7 @@ export class Game {
     // voiture : on peut tourner la caméra autour du véhicule ; elle revient derrière quand on roule
     if (this.mode === 'car') { if (lx) { this.carOff -= lx * 0.0055; this.lookT = 0; } else this.lookT += dt; if (this.lookT > 1.5 && Math.abs(this.car.speed) > 2) this.carOff *= 1 - Math.min(1, dt * 2.5); this.carOff = Math.atan2(Math.sin(this.carOff), Math.cos(this.carOff)); }
     if (this.observed) {   // mode observation : le joueur est spectateur (besoins figés), le temps peut être accéléré
-      if (inp.hit('Escape', 'quit')) this.stopObserving(); this.clock.tick(dt); this.hud.veil(0); this.hud.tick(dt); this.hud.prompt('Échap : quitter l\'observation'); return;
+      if (inp.hit('Escape', 'quit')) this.stopObserving(); this.clock.tick(dt); this.hud.veil(0); this.hud.tick(dt); this.hud.prompt(this.input.touch ? 'Bouton bleu « Quitter » : arrêter l\'observation' : 'Échap : quitter l\'observation'); return;
     }
     this.interior.tick(dt);
     this.t += dt; this.attackCd -= dt; this.processReports(); this.uw.update(dt); this.threaten(); this.arson.update(dt); this.heists.update(dt); this.kid.update();
