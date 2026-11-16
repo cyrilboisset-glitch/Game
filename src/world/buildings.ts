@@ -8,6 +8,21 @@ const PLASTER = ['#f1e8d6', '#e6d3b0', '#d9bf98', '#efe0c4', '#c9c4bb', '#e8cfc0
 const FLOOR_H = 3.0, BAY = 3.8;
 /** Couleurs par matériau IGN : murs (1 pierre, 2 meulière, 3 béton, 5 aggloméré enduit, 6 bois) et toits (2 ardoise, 3 zinc, 4 béton ; 1 tuiles = teinte par défaut). */
 const WALL_MAT: Record<number, THREE.Color> = { 1: new THREE.Color('#c8bba5'), 2: new THREE.Color('#cdb08a'), 3: new THREE.Color('#c9c6bf'), 6: new THREE.Color('#9a7655') };
+/** Luminance linéaire moyenne des textures de tuiles (gris 170) et de toit plat (gris 111) : la couleur de sommet = couleur voulue / luminance de la texture. */
+const TILE_LIN = 0.30, FLAT_LIN = 0.16;
+const TERRACOTTA = new THREE.Color('#91482f').multiplyScalar(1 / TILE_LIN);
+/**
+ * Couleur relevée sur la photo aérienne (sRGB). La photo a un voile mauve : on classe le toit puis on le ramène à une teinte plausible
+ * en gardant sa luminosité réelle — tuiles (rouges/roses/brunes) → terre cuite plus ou moins vieillie ; toits peu colorés → gris neutre (ardoise, zinc, béton).
+ */
+function roofFromPhoto(hex: string) {
+  const c = new THREE.Color(); c.setStyle('#' + hex, THREE.SRGBColorSpace); const hsl = { h: 0, s: 0, l: 0 }; c.getHSL(hsl, THREE.SRGBColorSpace);
+  const l = Math.min(0.72, hsl.l * 0.86);
+  if ((hsl.h > 0.8 || hsl.h < 0.11) && hsl.s > 0.1) c.setHSL(0.025 + Math.min(0.03, hsl.s * 0.05), Math.min(0.62, 0.3 + hsl.s * 0.9), l, THREE.SRGBColorSpace);   // tuiles
+  else if (hsl.h >= 0.11 && hsl.h < 0.2 && hsl.s > 0.12) c.setHSL(0.07, Math.min(0.4, hsl.s), l, THREE.SRGBColorSpace);   // tuiles brunes, bac acier ocre
+  else c.setHSL(0.6, 0.04, l, THREE.SRGBColorSpace);   // gris
+  return c;
+}
 const ROOF_MAT: Record<number, THREE.Color> = { 2: new THREE.Color('#5d6168'), 3: new THREE.Color('#9aa0a6'), 4: new THREE.Color('#a7a49d') };
 // cases de l'atlas (origine en bas à gauche, coordonnées v inversées par rapport au canvas)
 const CELL = { win: [0, 1], shut: [1, 1], lit: [2, 1], plain: [3, 1], door: [0, 0], shop: [1, 0] } as const;
@@ -112,11 +127,11 @@ function gable(B: BuildBuilders, p: Pt[], h: number, roofCol: THREE.Color, wallC
   }
 }
 
-function flatRoof(B: BuildBuilders, p: Pt[], h: number) {
+function flatRoof(B: BuildBuilders, p: Pt[], h: number, col: THREE.Color | null = null) {
   const contour = p.map(q => new THREE.Vector2(q[0], q[1]));
   const tris = THREE.ShapeUtils.triangulateShape(contour, []);
   const base = B.flat.count;
-  for (const q of p) B.flat.vert(q[0], h, q[1], 0, 1, 0, q[0] / 4, q[1] / 4, null);
+  for (const q of p) B.flat.vert(q[0], h, q[1], 0, 1, 0, q[0] / 4, q[1] / 4, col);
   for (const t of tris) B.flat.tri(base + t[0], base + t[2], base + t[1]);
 }
 
@@ -141,8 +156,11 @@ export function addBuilding(B: BuildBuilders, b: Build, idx: number) {
   const shapeOk = fill > 0.72 && p.length <= 14 && Math.abs(a) < 1500;
   const useGable = b.t !== undefined ? b.t >= 0.8 && shapeOk : !work && Math.abs(a) < 420 && fill > 0.8 && p.length <= 10 && floors <= 4 && rnd() < 0.85;
   if (B.trim) details(B.trim, p, h, floors, col, idx, Math.abs(a) > 180, !useGable || floors >= 3);
-  const roofCol = b.mt && ROOF_MAT[b.mt] ? ROOF_MAT[b.mt].clone().multiplyScalar(0.9 + rnd() * 0.15) : new THREE.Color().setHSL(0.03 + rnd() * 0.03, 0.2 + rnd() * 0.25, 0.65 + rnd() * 0.35);
-  if (useGable) { gable(B, p, h, roofCol, col, b.t ?? -1); }
-  else flatRoof(B, p, h);
+  // couleur du toit : mesurée sur la photo aérienne de l'IGN si possible, sinon matériau IGN, sinon terre cuite au hasard
+  const photo = b.rc ? roofFromPhoto(b.rc) : null;
+  if (useGable) {
+    const roofCol = photo ? photo.clone().multiplyScalar(1 / TILE_LIN) : b.mt && ROOF_MAT[b.mt] ? ROOF_MAT[b.mt].clone().multiplyScalar((0.9 + rnd() * 0.15) / TILE_LIN) : TERRACOTTA.clone().multiply(new THREE.Color().setHSL(0.03 + rnd() * 0.03, 0.2 + rnd() * 0.25, 0.65 + rnd() * 0.35));
+    gable(B, p, h, roofCol, col, b.t ?? -1);
+  } else flatRoof(B, p, h, photo ? photo.multiplyScalar(1 / FLAT_LIN) : null);
   return true;
 }

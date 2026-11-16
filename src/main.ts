@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { loadWorld } from './world/data';
 import { loadPoi, Signs } from './world/poi';
-import { createMaterials } from './world/materials';
+import { createMaterials, SOL_U } from './world/materials';
+import { sol } from './world/sol';
 import { Chunks } from './world/chunks';
 import { Environment } from './world/environment';
 import { Car } from './vehicles/car';
@@ -52,6 +53,7 @@ const post = new Post(renderer, scene, camera);
 addEventListener('resize', () => { renderer.setSize(innerWidth, innerHeight); post.setSize(innerWidth, innerHeight); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); });
 
 const [world, pois, addrs] = await Promise.all([loadWorld(), loadPoi(), loadAddresses()]);
+await sol.load(world); if (sol.tex && !q.has('nophoto')) { SOL_U.uSol.value = sol.tex; SOL_U.uSolR.value.copy(sol.rect); SOL_U.uSolK.value = 1; }   // couleurs réelles du sol (photo aérienne IGN)
 const chunks = new Chunks(world, mats, scene); const signs = new Signs(pois, scene);
 const car = new Car(); car.setVehicle('depart', 0xb9b2a0, SPECS.depart.hp); scene.add(car.root);
 const avatars = new AvatarFactory(); await avatars.load(import.meta.env.BASE_URL + 'assets/citizen.glb', import.meta.env.BASE_URL + 'assets/ual.glb');

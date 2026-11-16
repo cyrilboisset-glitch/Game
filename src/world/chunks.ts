@@ -8,6 +8,7 @@ import type { GroundMask } from './mask';
 import { PropColliders, propSink, type Sink } from './solids';
 import { area, centroid, length, pointInPoly, slice, type Pt } from './geom';
 import { rnd, reseed } from './textures';
+import { sol } from './sol';
 import type { Materials } from './materials';
 
 interface Raw { builds: number[]; roads: { ri: number; piece: Pt[]; sBase: number }[]; rails: Pt[][]; waters: { p: Pt[]; a: number }[]; greens: { p: Pt[]; k: string }[]; }
@@ -58,7 +59,7 @@ export class Chunks {
             if (inBuilding(px, pz)) continue;
             const k = Math.floor(t / 14) + rr.ri;
             if (k % 3 === 0) { addLamp(poles, heads, px, pz, -dz * side, dx * side); this.lamps.push(new THREE.Vector3(px, 7, pz)); }
-            else if (k % 3 === 1 && rnd() < 0.7) { if (rnd() < 0.12) addConifer(trees, leaves, px, pz, 0.7 + rnd() * 0.3); else addTree(trees, leaves, px, pz, 0.8 + rnd() * 0.5); }
+            else if (k % 3 === 1 && rnd() < 0.7 && sol.canopy(px, pz) !== false) { /* arbre d'alignement seulement s'il y en a un sur la photo aérienne */ if (rnd() < 0.12) addConifer(trees, leaves, px, pz, 0.7 + rnd() * 0.3); else addTree(trees, leaves, px, pz, 0.8 + rnd() * 0.5); }
           }
           acc = (acc + 1e6) % 14;
         }
@@ -80,7 +81,9 @@ export class Chunks {
     const M = this.mask;
     if (M) {
       const x0 = cx * CHUNK, z0 = cy * CHUNK;
-      for (let i = 0; i < 110; i++) { const x = x0 + rnd() * CHUNK, z = z0 + rnd() * CHUNK; if (!M.free(x, z, 1.6) || !M.nearBuilding(x, z, 10)) continue; const r = rnd(); if (r < 0.55) addBush(leaves, x, z, 0.8 + rnd() * 0.7); else if (r < 0.88) addTree(trees, leaves, x, z, 0.65 + rnd() * 0.45); else addConifer(trees, leaves, x, z, 0.6 + rnd() * 0.4); }
+      // avec la photo aérienne : arbres là où il y a de la canopée, arbustes isolés sur les pelouses, rien sur le goudron
+      for (let i = 0, placed = 0; i < 260 && placed < 110; i++) { const x = x0 + rnd() * CHUNK, z = z0 + rnd() * CHUNK; if (!M.free(x, z, 1.6) || !M.nearBuilding(x, z, 10)) continue; const cano = sol.canopy(x, z);
+        if (cano === false && (sol.paved(x, z) || rnd() < 0.8)) continue; placed++; const r = cano ? 0.35 + rnd() * 0.65 : rnd(); if (r < 0.55) addBush(leaves, x, z, 0.8 + rnd() * 0.7); else if (r < 0.88) addTree(trees, leaves, x, z, 0.65 + rnd() * 0.45); else addConifer(trees, leaves, x, z, 0.6 + rnd() * 0.4); }
       for (const rr of raw.roads) {   // mobilier urbain : bancs + poubelles le long des axes, panneaux aux carrefours
         const road = this.w.roads[rr.ri]; if (!['primary', 'secondary', 'tertiary', 'residential', 'unclassified'].includes(road.t)) continue; const hw = ROAD_W[road.t] / 2; const total = length(rr.piece);
         const at = (sAt: number) => { const sg = slice(rr.piece, sAt, sAt + 0.5); if (sg.length < 2) return null; const a = sg[0], b = sg[sg.length - 1]; const l = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1; return { x: a[0], z: a[1], dx: (b[0] - a[0]) / l, dz: (b[1] - a[1]) / l }; };

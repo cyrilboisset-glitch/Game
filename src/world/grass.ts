@@ -1,7 +1,11 @@
 import * as THREE from 'three';
 import { grassBlades } from './textures';
 import type { GroundMask } from './mask';
+import { sol } from './sol';
 
+const REF = new THREE.Color(100 / 255, 118 / 255, 92 / 255).convertSRGBToLinear(), TMP = new THREE.Color();
+/** Teinte de la touffe selon la photo aérienne : herbe verte dans un pré, paille dans un champ moissonné. */
+function tintAt(x: number, z: number) { const c = sol.sample(x, z); if (!c) return TMP.setRGB(1, 1, 1); TMP.setRGB(c[0] / 255, c[1] / 255, c[2] / 255).convertSRGBToLinear(); return TMP.setRGB(Math.min(1.8, Math.max(0.5, TMP.r / REF.r)), Math.min(1.8, Math.max(0.5, TMP.g / REF.g)), Math.min(1.8, Math.max(0.5, TMP.b / REF.b))); }
 /** Touffes d'herbe autour de la caméra (1 draw call), qui ondulent au vent ; replacées quand on se déplace. Jamais sur la route ni dans un bâtiment. */
 export class GrassField {
   mesh: THREE.InstancedMesh; private last = new THREE.Vector2(1e9, 1e9); private uTime = { value: 0 }; enabled = true;
@@ -17,7 +21,7 @@ export class GrassField {
   update(dt: number, x: number, z: number) {
     this.uTime.value += dt; this.mesh.visible = this.enabled; if (!this.enabled || Math.hypot(x - this.last.x, z - this.last.y) < 10) return; this.last.set(x, z);
     const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), p = new THREE.Vector3(); let k = 0; let seed = (Math.floor(x / 10) * 92821 + Math.floor(z / 10) * 68917) >>> 0; const r = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
-    for (let i = 0; i < this.n * 2 && k < this.n; i++) { const a = r() * Math.PI * 2, d = Math.sqrt(r()) * this.R; const px = x + Math.cos(a) * d, pz = z + Math.sin(a) * d; if (this.mask.get(px, pz)) continue; q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), r() * 6.28); const sc = 0.45 + r() * 0.6; m.compose(p.set(px, 0.01, pz), q, s.set(sc, sc * (0.7 + r() * 0.6), sc)); this.mesh.setMatrixAt(k++, m); }
-    this.mesh.count = k; this.mesh.instanceMatrix.needsUpdate = true;
+    for (let i = 0; i < this.n * 2 && k < this.n; i++) { const a = r() * Math.PI * 2, d = Math.sqrt(r()) * this.R; const px = x + Math.cos(a) * d, pz = z + Math.sin(a) * d; if (this.mask.get(px, pz) || sol.paved(px, pz)) continue; q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), r() * 6.28); const sc = 0.45 + r() * 0.6; m.compose(p.set(px, 0.01, pz), q, s.set(sc, sc * (0.7 + r() * 0.6), sc)); this.mesh.setMatrixAt(k, m); this.mesh.setColorAt(k++, tintAt(px, pz)); }
+    this.mesh.count = k; this.mesh.instanceMatrix.needsUpdate = true; if (this.mesh.instanceColor) this.mesh.instanceColor.needsUpdate = true;
   }
 }

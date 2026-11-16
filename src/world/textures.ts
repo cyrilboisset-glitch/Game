@@ -118,12 +118,13 @@ export function gravel(): PBR {   // ballast + traverses (u = travers, v = 2,2 m
 
 export function roofTiles(): PBR {
   const W = 512; const { c, g } = canvas(W);
-  g.fillStyle = '#7b3f2c'; g.fillRect(0, 0, W, W);
+  // tuiles neutres (gris clair) : la teinte vient des couleurs de sommet (couleur mesurée sur la photo aérienne, ou terre cuite par défaut)
+  g.fillStyle = '#6a6a6a'; g.fillRect(0, 0, W, W);
   const hc = canvas(W); hc.g.fillStyle = '#808080'; hc.g.fillRect(0, 0, W, W);
   const rows = 16, cols = 8, th = W / rows, tw = W / cols;
   for (let r = 0; r < rows; r++) for (let q = 0; q <= cols; q++) {
     const x = q * tw + (r % 2 ? tw / 2 : 0) - tw / 2, y = r * th; const v = 0.82 + rnd() * 0.3;
-    g.fillStyle = `rgb(${150 * v},${74 * v},${50 * v})`; g.fillRect(x + 1, y, tw - 2, th + 1);
+    g.fillStyle = `rgb(${170 * v},${170 * v},${170 * v})`; g.fillRect(x + 1, y, tw - 2, th + 1);
     const gr = g.createLinearGradient(0, y, 0, y + th); gr.addColorStop(0, 'rgba(0,0,0,0.45)'); gr.addColorStop(0.35, 'rgba(0,0,0,0)'); gr.addColorStop(1, 'rgba(255,255,255,0.08)');
     g.fillStyle = gr; g.fillRect(x + 1, y, tw - 2, th + 1);
     const hg = hc.g.createLinearGradient(0, y, 0, y + th); hg.addColorStop(0, '#202020'); hg.addColorStop(1, '#e0e0e0');
