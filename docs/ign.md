@@ -97,3 +97,26 @@ Je reconstruis ensuite le jeu, je relance les tests, je publie sur GitHub Pages 
 Les données IGN ne servent qu'à la forme des bâtiments, à leur hauteur, leur usage et leur nombre de logements. Elles ne changent rien aux règles du jeu : les lieux de trafic restent fictifs et placés sur des emplacements neutres, aucun vrai immeuble ni aucune vraie résidence ne devient un lieu criminel, et la gendarmerie garde sa vraie position.
 
 *Source des données : IGN – BD TOPO®, licence ouverte Etalab 2.0.*
+
+---
+
+## Sources ajoutées ensuite (récupérées directement, avec l'accès réseau autorisé)
+
+| Source | Ce que ça apporte | Script |
+|---|---|---|
+| Photo aérienne IGN (BD ORTHO, 0,55 m/pixel) | vraie couleur de chaque toit ; couleur du sol (champs, prés, bois, cours, parkings) ; herbe absente du goudron ; arbres des jardins et des rues là où il y en a vraiment | `tools/import_ortho.py` |
+| Panoramax (3 513 panoramas 360°) | vraie couleur des façades, mesurée sur les murs visibles depuis la rue | `tools/import_panoramax.py` |
+| Cadastre Etalab + haies BD TOPO | haies, murets et grillages sur les vraies limites des terrains habités, avec un portail côté rue ; haies champêtres | `tools/import_cadastre.py` |
+
+Ordre de reconstruction complet (depuis le fichier OSM d'origine) :
+
+```
+git checkout <commit OSM> -- public/data/pontcharra.json   # ou python3 -I tools/convert_osm.py data/map.osm public/data/pontcharra.json
+python3 -I tools/import_ign.py data/ign-*.json
+python3 -I tools/import_ortho.py data/src
+python3 -I tools/import_panoramax.py data/src/pano-index.json
+python3 -I tools/import_cadastre.py data/src
+```
+
+Les fichiers bruts (`data/src/`) ne sont pas versionnés : ils se retéléchargent (liens WFS/WMS ci-dessus, cadastre
+`cadastre.data.gouv.fr/data/etalab-cadastre/latest/geojson/communes/38/38314/`, index Panoramax via `api.panoramax.xyz/api/search`).

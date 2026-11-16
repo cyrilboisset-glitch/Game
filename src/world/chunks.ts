@@ -11,7 +11,7 @@ import { rnd, reseed } from './textures';
 import { sol } from './sol';
 import type { Materials } from './materials';
 
-interface Raw { builds: number[]; roads: { ri: number; piece: Pt[]; sBase: number }[]; rails: Pt[][]; waters: { p: Pt[]; a: number }[]; greens: { p: Pt[]; k: string }[]; }
+interface Raw { fences: number[]; builds: number[]; roads: { ri: number; piece: Pt[]; sBase: number }[]; rails: Pt[][]; waters: { p: Pt[]; a: number }[]; greens: { p: Pt[]; k: string }[]; }
 const ck = (cx: number, cy: number) => `${cx},${cy}`;
 const cOf = (x: number, y: number) => [Math.floor(x / CHUNK), Math.floor(y / CHUNK)];
 
@@ -19,7 +19,7 @@ export class Chunks {
   grid = new Map<string, Raw>(); loaded = new Map<string, THREE.Group>(); lamps: THREE.Vector3[] = [];
   mask?: GroundMask; props = new PropColliders();
   constructor(private w: WorldData, private mats: Materials, private scene: THREE.Scene) { this.index(); }
-  private raw(k: string): Raw { let r = this.grid.get(k); if (!r) { r = { builds: [], roads: [], rails: [], waters: [], greens: [] }; this.grid.set(k, r); } return r; }
+  private raw(k: string): Raw { let r = this.grid.get(k); if (!r) { r = { fences: [], builds: [], roads: [], rails: [], waters: [], greens: [] }; this.grid.set(k, r); } return r; }
 
   private index() {
     const w = this.w;
@@ -31,6 +31,7 @@ export class Chunks {
     });
     for (const p of w.rails) for (const piece of splitGrid(p, CHUNK)) { const [cx, cy] = cOf((piece[0][0] + piece[piece.length - 1][0]) / 2, (piece[0][1] + piece[piece.length - 1][1]) / 2); this.raw(ck(cx, cy)).rails.push([...piece]); }
     for (const wa of w.waters) { const [cx, cy] = cOf(...centroid(wa.p) as [number, number]); this.raw(ck(cx, cy)).waters.push(wa); }
+    (w.fences ?? []).forEach((f, i) => { const [cx, cy] = cOf((f[0] + f[2]) / 2, (f[1] + f[3]) / 2); this.raw(ck(cx, cy)).fences.push(i); });
     for (const g of w.greens) { const [cx, cy] = cOf(...centroid(g.p) as [number, number]); this.raw(ck(cx, cy)).greens.push(g); }
   }
 
@@ -40,7 +41,7 @@ export class Chunks {
     const m = this.mats;
     const BB: BuildBuilders = { wall: new MeshBuilder(), roof: new MeshBuilder(), flat: new MeshBuilder(), trim: new MeshBuilder() };
     const RB: RoadBuilders = { marked: new MeshBuilder(), plain: new MeshBuilder(), paving: new MeshBuilder(), gravel: new MeshBuilder(), marks: new MeshBuilder() };
-    const ground = new MeshBuilder(), water = new MeshBuilder(), trees = new MeshBuilder(), leaves = new MeshBuilder(), poles = new MeshBuilder(), heads = new MeshBuilder(), hedges = new MeshBuilder(), solids = new MeshBuilder();
+    const ground = new MeshBuilder(), water = new MeshBuilder(), trees = new MeshBuilder(), leaves = new MeshBuilder(), poles = new MeshBuilder(), heads = new MeshBuilder(), hedges = new MeshBuilder(), solids = new MeshBuilder(), wire = new MeshBuilder();
     const nearBuilds: Pt[][] = [];
     // bâtiments voisins pour éviter d'y planter des arbres
     for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) { const r2 = this.grid.get(ck(cx + dx, cy + dy)); if (r2) for (const bi of r2.builds) nearBuilds.push(this.w.builds[bi].p); }
@@ -90,7 +91,12 @@ export class Chunks {
         if (road.t !== 'residential' && road.t !== 'unclassified') for (let sAt = 20 + rnd() * 30; sAt < total - 2; sAt += 55 + rnd() * 40) { const p = at(sAt); if (!p) continue; const side = rnd() < 0.5 ? 1 : -1; const bx = p.x - p.dz * (hw + 2.3) * side, bz = p.z + p.dx * (hw + 2.3) * side; if (M.get(bx, bz) === 2) continue; addBench(solids, bx, bz, p.dz * side, -p.dx * side); addBin(solids, bx + p.dx * 1.4, bz + p.dz * 1.4); }
         if (road.t === 'residential' || road.t === 'unclassified') for (const [c0] of ((road as any)._cuts as [number, number][]) ?? []) { const sAt = c0 - rr.sBase - 0.5; if (sAt < 0 || sAt > total - 1 || rnd() > 0.35) continue; const p = at(sAt); if (!p) continue; addSign(poles, solids, p.x - p.dz * (hw + 0.5), p.z + p.dx * (hw + 0.5), p.dx, p.dz, rnd() < 0.4); }
       }
-      for (const rr of raw.roads) {
+      // vraies clôtures : limites des parcelles habitées (cadastre) et haies relevées par l'IGN
+      const KINDS = ['haie', 'muret', 'grillage', 'champetre'] as const;
+      for (const fi of raw.fences) { const f = this.w.fences![fi]; addFence(hedges, solids, poles, f[0], f[1], f[2], f[3], KINDS[f[4]] ?? 'haie', wire); }
+      // ailleurs (hors cadastre) : clôtures devinées le long des rues
+      let cadastre = false; for (let dx = -1; dx <= 1 && !cadastre; dx++) for (let dy = -1; dy <= 1; dy++) if (this.grid.get(ck(cx + dx, cy + dy))?.fences.length) { cadastre = true; break; }
+      if (!cadastre) for (const rr of raw.roads) {
         const road = this.w.roads[rr.ri]; if (!['residential', 'tertiary', 'unclassified', 'living_street'].includes(road.t)) continue; const off = ROAD_W[road.t] / 2 + 2.9;
         for (const side of [1, -1]) { let run: Pt[] = []; const flush = () => { if (run.length >= 3) { const a = run[0], b = run[run.length - 1]; const h = Math.abs(Math.sin(a[0] * 12.9898 + a[1] * 78.233) * 43758.5453) % 1; addFence(hedges, solids, poles, a[0], a[1], b[0], b[1], h < 0.6 ? 'haie' : 'muret'); } run = []; };
           let acc = 0; for (let i = 0; i < rr.piece.length - 1; i++) { const a = rr.piece[i], b = rr.piece[i + 1]; const l = Math.hypot(b[0] - a[0], b[1] - a[1]); if (l < 0.5) continue; const dx = (b[0] - a[0]) / l, dz = (b[1] - a[1]) / l;
@@ -100,7 +106,7 @@ export class Chunks {
     const add = (b: MeshBuilder, mat: THREE.Material, shadow = false, recv = true) => { const geo = b.build(); if (!geo) return; const me = new THREE.Mesh(geo, mat); me.castShadow = shadow; me.userData.shadowCaster = shadow; me.receiveShadow = recv; g.add(me); };
     add(BB.wall, m.wall, true); add(BB.roof, m.roof, true); add(BB.flat, m.flat, true); add(BB.trim!, m.bark, true);
     add(RB.marked, m.asphaltMarked); add(RB.plain, m.asphalt); add(RB.paving, m.pavement); add(RB.gravel, m.gravel); add(RB.marks, m.marks);
-    add(ground, m.greens); add(water, m.water, false); add(trees, m.bark, true); add(leaves, m.leaves, true); add(poles, m.metal, true); add(heads, m.lampHead, false, false); add(hedges, m.hedge, true); add(solids, m.bark, true);
+    add(ground, m.greens); add(water, m.water, false); add(trees, m.bark, true); add(leaves, m.leaves, true); add(poles, m.metal, true); add(heads, m.lampHead, false, false); add(hedges, m.hedge, true); add(solids, m.bark, true); add(wire, m.wire, false);
     propSink.cur = null; return g;
   }
 

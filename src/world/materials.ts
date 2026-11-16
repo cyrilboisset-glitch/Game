@@ -48,11 +48,12 @@ export function createMaterials() {
   const bark = std({ color: 0xffffff, vertexColors: true, roughness: 0.9, side: THREE.DoubleSide });
   const leaves = std({ map: TX.leaf(), alphaTest: 0.42, alphaToCoverage: true, vertexColors: true, roughness: 0.85, side: THREE.DoubleSide });
   const hedgeT = TX.leaf(); const hedge = std({ map: TX.hedgeTex(), vertexColors: true, roughness: 0.95 }); void hedgeT;
+  const wire = std({ map: TX.wireTex(), alphaTest: 0.4, side: THREE.DoubleSide, roughness: 0.7, metalness: 0.3 });
   const metal = std({ color: 0x40444a, metalness: 0.6, roughness: 0.5, vertexColors: true, side: THREE.DoubleSide });
   const lampHead = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xffd9a0, emissiveIntensity: 0, side: THREE.DoubleSide });
   const groundTex = TX.grass(); groundTex.map.repeat.set(600, 600); groundTex.normalMap.repeat.set(600, 600);
   const ground = std({ map: groundTex.map, normalMap: groundTex.normalMap, roughness: 1, color: 0xffffff }); naturalGround(ground); naturalGround(greens, 0.8, true); SOL_U.uSolDet.value = avgLum(groundTex.map);
   const marks = std({ color: 0xe9e9e2, roughness: 0.7, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3, side: THREE.DoubleSide });
-  return { marks, wall, roof, flat, asphaltMarked, asphalt, pavement, gravel, greens, water, bark, leaves, metal, lampHead, ground, hedge };
+  return { marks, wall, roof, flat, asphaltMarked, asphalt, pavement, gravel, greens, water, bark, leaves, metal, lampHead, ground, hedge, wire };
 }
 export type Materials = ReturnType<typeof createMaterials>;

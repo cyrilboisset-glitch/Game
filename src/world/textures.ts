@@ -221,6 +221,12 @@ export function hedgeTex(): THREE.Texture {
   return tex(c, true);
 }
 
+/** Grillage soudé vert (1 répétition = 0,5 m) : fond transparent, fils diagonaux. */
+export function wireTex(): THREE.Texture {
+  const W = 64; const { c, g } = canvas(W); g.clearRect(0, 0, W, W); g.strokeStyle = '#2f4a2c'; g.lineWidth = 3;
+  g.beginPath(); for (const o of [-W, 0, W]) { g.moveTo(o, 0); g.lineTo(o + W, W); g.moveTo(o + W, 0); g.lineTo(o, W); } g.stroke(); return tex(c, true);
+}
+
 /** Sols et murs d'intérieur (1 répétition = 2 m). */
 export function floorTex(kind: 'bois' | 'carrelage' | 'beton'): PBR {
   const W = 512; const { c, g } = canvas(W); const hc = canvas(W); hc.g.fillStyle = '#909090'; hc.g.fillRect(0, 0, W, W);

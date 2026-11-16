@@ -10,3 +10,10 @@
 ## Données IGN (optionnel)
 
 BD TOPO® de l'IGN, licence ouverte Etalab 2.0 : hauteurs, étages, usages et logements des bâtiments, importés avec `tools/import_ign.py` (voir `docs/ign.md`).
+
+## Photo aérienne, cadastre et photos de rue
+
+- **BD ORTHO® de l'IGN** (Géoplateforme, licence ouverte Etalab 2.0) : couleur de chaque toit et carte de couleur du sol (`tools/import_ortho.py`). La photo elle-même n'est pas incluse dans le jeu : seule une carte de couleur réduite (2,2 m par pixel, routes et toits effacés) l'est.
+- **Plan cadastral Etalab** (licence ouverte 2.0) : tracé des limites de parcelles habitées, pour les haies, murets et grillages (`tools/import_cadastre.py`). Aucun identifiant de parcelle n'est conservé.
+- **BD TOPO® « haie »** de l'IGN (Etalab 2.0) : haies champêtres.
+- **Panoramax** (photos de rue libres ; instances IGN sous Etalab 2.0 et OpenStreetMap France sous CC-BY-SA 4.0, © contributeurs Panoramax) : couleur des façades, mesurée sur les panoramas 360° (`tools/import_panoramax.py`). Aucune photo n'est incluse dans le jeu : seule une couleur médiane par bâtiment l'est.

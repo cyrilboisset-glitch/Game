@@ -43,12 +43,22 @@ export function addBush(crown: MeshBuilder, x: number, z: number, s: number) {
 }
 const HEDGE = new THREE.Color('#3d5a2c'), WALL = new THREE.Color('#bdb3a2'), GRILLE = new THREE.Color('#2a2c2e');
 /** Clôture de propriété le long de la rue : haie taillée, ou muret + grille. (ax,az)→(bx,bz). */
-export function addFence(hedges: MeshBuilder, solids: MeshBuilder, poles: MeshBuilder, ax: number, az: number, bx: number, bz: number, kind: 'haie' | 'muret') {
-  const l = Math.hypot(bx - ax, bz - az); if (l < 1) return; const dx = (bx - ax) / l, dz = (bz - az) / l, nx = -dz, nz = dx; sinkSeg(ax, az, bx, bz, kind === 'haie' ? 0.4 : 0.18); sinkFence(ax, az, bx, bz, kind === 'haie' ? 1.5 : 1.3);
+export type FenceKind = 'haie' | 'muret' | 'grillage' | 'champetre';
+export function addFence(hedges: MeshBuilder, solids: MeshBuilder, poles: MeshBuilder, ax: number, az: number, bx: number, bz: number, kind: FenceKind, wire?: MeshBuilder) {
+  const l = Math.hypot(bx - ax, bz - az); if (l < 1) return; const dx = (bx - ax) / l, dz = (bz - az) / l, nx = -dz, nz = dx; const green = kind === 'haie' || kind === 'champetre'; sinkSeg(ax, az, bx, bz, green ? (kind === 'champetre' ? 0.6 : 0.4) : kind === 'grillage' ? 0.08 : 0.18); sinkFence(ax, az, bx, bz, kind === 'champetre' ? 2.2 : kind === 'haie' ? 1.5 : 1.3);
   const box = (b: MeshBuilder, w: number, h: number, y0: number, col: THREE.Color) => { const P = (s: number, o: number, y: number) => [ax + dx * s + nx * o, y, az + dz * s + nz * o]; const o = w / 2;
     b.planar([P(0, o, y0), P(l, o, y0), P(l, o, y0 + h), P(0, o, y0 + h)], [[0, 0], [l / 2, 0], [l / 2, h / 2], [0, h / 2]], col); b.planar([P(l, -o, y0), P(0, -o, y0), P(0, -o, y0 + h), P(l, -o, y0 + h)], [[0, 0], [l / 2, 0], [l / 2, h / 2], [0, h / 2]], col);
     b.planar([P(0, -o, y0 + h), P(0, o, y0 + h), P(l, o, y0 + h), P(l, -o, y0 + h)], [[0, 0], [w / 2, 0], [w / 2, l / 2], [0, l / 2]], col.clone().multiplyScalar(1.1)); b.planar([P(0, -o, y0), P(0, o, y0), P(0, o, y0 + h), P(0, -o, y0 + h)], [[0, 0], [1, 0], [1, 1], [0, 1]], col); b.planar([P(l, o, y0), P(l, -o, y0), P(l, -o, y0 + h), P(l, o, y0 + h)], [[0, 0], [1, 0], [1, 1], [0, 1]], col); };
   if (kind === 'haie') box(hedges, 0.75, 1.35 + rnd() * 0.3, 0, HEDGE.clone().multiplyScalar(0.85 + rnd() * 0.3));
+  else if (kind === 'champetre') {   // haie champêtre : plus haute, irrégulière, par tronçons
+    for (let s = 0; s < l; s += 4) { const e = Math.min(l, s + 4); const P = (t: number): [number, number] => [ax + dx * t, az + dz * t]; const [x0, z0] = P(s), [x1, z1] = P(e); const w2 = 1.1 + rnd() * 0.5, hh = 1.8 + rnd() * 1.1;
+      const q = (t: number, o: number, y: number) => { const x = x0 + (x1 - x0) * t + nx * o, z = z0 + (z1 - z0) * t + nz * o; return [x, y, z]; }; const ll = e - s; const col = HEDGE.clone().multiplyScalar(0.75 + rnd() * 0.35);
+      hedges.planar([q(0, w2 / 2, 0), q(1, w2 / 2, 0), q(1, w2 / 2, hh), q(0, w2 / 2, hh)], [[0, 0], [ll / 2, 0], [ll / 2, hh / 2], [0, hh / 2]], col); hedges.planar([q(1, -w2 / 2, 0), q(0, -w2 / 2, 0), q(0, -w2 / 2, hh), q(1, -w2 / 2, hh)], [[0, 0], [ll / 2, 0], [ll / 2, hh / 2], [0, hh / 2]], col);
+      hedges.planar([q(0, -w2 / 2, hh), q(0, w2 / 2, hh), q(1, w2 / 2, hh), q(1, -w2 / 2, hh)], [[0, 0], [w2 / 2, 0], [w2 / 2, ll / 2], [0, ll / 2]], col.clone().multiplyScalar(1.1)); }
+  } else if (kind === 'grillage') {   // grillage vert sur piquets
+    for (let s = 0; s <= l; s += 2.5) solids.box(ax + dx * s, az + dz * s, 0.06, 0.06, 1.5, 0, GRILLE);
+    if (wire) { const P = (t: number, y: number) => [ax + dx * t, y, az + dz * t]; wire.planar([P(0, 0.05), P(l, 0.05), P(l, 1.45), P(0, 1.45)], [[0, 0], [l * 2, 0], [l * 2, 2.8], [0, 2.8]], null); }
+  }
   else { box(solids, 0.25, 0.7, 0, WALL); box(poles, 0.04, 0.6, 0.7, GRILLE); for (let s = 0; s < l; s += 2.5) { const x = ax + dx * s, z = az + dz * s; solids.box(x, z, 0.32, 0.32, 1.4, 0, WALL); } }
 }
 

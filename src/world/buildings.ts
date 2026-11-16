@@ -9,7 +9,7 @@ const FLOOR_H = 3.0, BAY = 3.8;
 /** Couleurs par matériau IGN : murs (1 pierre, 2 meulière, 3 béton, 5 aggloméré enduit, 6 bois) et toits (2 ardoise, 3 zinc, 4 béton ; 1 tuiles = teinte par défaut). */
 const WALL_MAT: Record<number, THREE.Color> = { 1: new THREE.Color('#c8bba5'), 2: new THREE.Color('#cdb08a'), 3: new THREE.Color('#c9c6bf'), 6: new THREE.Color('#9a7655') };
 /** Luminance linéaire moyenne des textures de tuiles (gris 170) et de toit plat (gris 111) : la couleur de sommet = couleur voulue / luminance de la texture. */
-const TILE_LIN = 0.30, FLAT_LIN = 0.16;
+const TILE_LIN = 0.30, FLAT_LIN = 0.16, PLASTER_LIN = 0.88;   // enduit de l'atlas de façade : #f4f1ea
 const TERRACOTTA = new THREE.Color('#91482f').multiplyScalar(1 / TILE_LIN);
 /**
  * Couleur relevée sur la photo aérienne (sRGB). La photo a un voile mauve : on classe le toit puis on le ramène à une teinte plausible
@@ -149,7 +149,8 @@ export function addBuilding(B: BuildBuilders, b: Build, idx: number) {
   // matériaux des murs (fichiers fonciers via l'IGN) : brique, pierre, meulière, béton, bois ; sinon enduit
   BRICK = b.mw ? (b.mw === 4 ? 1 : 0) : (idx * 2654435761 >>> 0) % 100 < 18 ? 1 : 0;
   const tint = 0.92 + rnd() * 0.12;
-  const col = BRICK ? new THREE.Color(1, 0.96, 0.92).multiplyScalar(0.82 + rnd() * 0.22) : b.mw && WALL_MAT[b.mw] ? WALL_MAT[b.mw].clone().multiplyScalar(tint) : PLASTER[idx % PLASTER.length].clone().multiplyScalar(tint);
+  // façade : couleur mesurée sur les photos de rue Panoramax si possible (sauf brique apparente), sinon matériau IGN, sinon enduit au hasard
+  const col = BRICK ? new THREE.Color(1, 0.96, 0.92).multiplyScalar(0.82 + rnd() * 0.22) : b.wc ? new THREE.Color().setStyle('#' + b.wc, THREE.SRGBColorSpace).multiplyScalar(1 / PLASTER_LIN) : b.mw && WALL_MAT[b.mw] ? WALL_MAT[b.mw].clone().multiplyScalar(tint) : PLASTER[idx % PLASTER.length].clone().multiplyScalar(tint);
   wallRun(B, p, h, floors, col, idx);
   const o = obb(p); const fill = Math.abs(a) / Math.max(1, o.a);
   // toit : l'IGN dit s'il est plat (faîtage ≈ gouttière) ou en pente, et de combien ; sans donnée, on devine selon la forme
