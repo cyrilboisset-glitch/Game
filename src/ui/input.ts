@@ -40,7 +40,7 @@ export class Input {
     root.innerHTML = `<div id="joy"><div id="knob"></div></div>
       <div id="pad"><button class="rb" id="bA" data-a="action">E</button><button class="rb" id="bB" data-a="hit">Frapper</button><button class="rb" id="bC" data-h="run">Courir</button><button class="rb" id="bD" data-a="crouch">Accroupi</button><button class="rb" id="bM" data-m="1">☰</button></div>
       <div id="chips"></div>
-      <div id="tpanel" style="display:none">${MENU.map(([a, l, h]) => `<button ${h ? 'data-h' : 'data-a'}="${a}" data-close="1">${l}</button>`).join('')}<button data-close="1" class="x">Fermer</button></div>`;
+      <div id="tpanel" style="display:none">${MENU.map(([a, l, h]) => `<button ${h ? 'data-h' : 'data-a'}="${a}" data-close="1">${l}</button>`).join('')}<button data-ui="gear" data-close="1">Réglages</button><button data-ui="reset" data-close="1">Nouvelle partie</button><button data-close="1" class="x" style="grid-column:auto">Fermer</button></div>`;
     this.root = root;
     const joy = root.querySelector('#joy') as HTMLElement, knob = root.querySelector('#knob') as HTMLElement; let id = -1;
     const upd = (e: PointerEvent) => { const r = joy.getBoundingClientRect(); let dx = (e.clientX - (r.left + r.width / 2)) / (r.width / 2), dy = (e.clientY - (r.top + r.height / 2)) / (r.height / 2); const l = Math.hypot(dx, dy); if (l > 1) { dx /= l; dy /= l; } this.touchMove = { x: dx, y: -dy }; knob.style.transform = `translate(${dx * 38}px,${dy * 38}px)`; };
@@ -49,6 +49,7 @@ export class Input {
     // délégation : les boutons contextuels sont recréés à la volée
     const btnOf = (e: Event) => (e.target as HTMLElement).closest('button') as HTMLButtonElement | null;
     root.addEventListener('pointerdown', e => { const b = btnOf(e); if (!b) return; e.preventDefault(); const a = b.dataset.a, h = b.dataset.h; if (h) this.touchBtn.add(h); if (a) this.touchBtn.add('hit:' + a); b.classList.add('down');
+      if (b.dataset.ui === 'gear') (document.getElementById('gear') as HTMLElement | null)?.click(); if (b.dataset.ui === 'reset' && confirm('Effacer la sauvegarde et recommencer ?')) document.getElementById('reset')?.click();
       if (b.dataset.m) this.panel(true); else if (b.dataset.close) setTimeout(() => this.panel(false), 60); if (navigator.vibrate) navigator.vibrate(12); });
     const up = (e: Event) => { const b = btnOf(e); if (!b) return; const h = b.dataset.h; if (h && !b.dataset.close) this.touchBtn.delete(h); b.classList.remove('down'); if (h && b.dataset.close) setTimeout(() => this.touchBtn.delete(h), 400); };
     root.addEventListener('pointerup', up); root.addEventListener('pointerout', up); root.addEventListener('pointercancel', up);
