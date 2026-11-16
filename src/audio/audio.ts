@@ -1,10 +1,10 @@
 import { engineRpm, rpmToFreq, sirenFreq, distGain, stepInterval, clamp } from './mapping';
 
-export interface AudioState { inCar: boolean; speed: number; throttle: number; slip: number; dead: boolean; footSpeed: number; inside: boolean; night: boolean; policeDist: number; alert: boolean; horn: boolean; rain?: number; }
+export interface AudioState { inCar: boolean; speed: number; throttle: number; slip: number; dead: boolean; footSpeed: number; inside: boolean; night: boolean; policeDist: number; alert: boolean; horn: boolean; rain?: number; traffic?: number; bell?: number; }
 /** Sons 100 % procéduraux (WebAudio, aucun fichier) : moteur, roulement, dérapage, sirène, ambiance, pas, chocs, klaxon. Démarre au premier geste de l'utilisateur. */
 export class AudioSys {
   private ctx?: AudioContext; private master?: GainNode; private amb?: GainNode; private ambLP?: BiquadFilterNode; private noise?: AudioBuffer;
-  private eng?: { o1: OscillatorNode; o2: OscillatorNode; g: GainNode; lp: BiquadFilterNode }; private road?: { g: GainNode; lp: BiquadFilterNode }; private skid?: GainNode; private siren?: { o: OscillatorNode; g: GainNode }; private hornG?: GainNode; private wind?: GainNode; private cric?: GainNode;
+  private eng?: { o1: OscillatorNode; o2: OscillatorNode; g: GainNode; lp: BiquadFilterNode }; private road?: { g: GainNode; lp: BiquadFilterNode }; private skid?: GainNode; private siren?: { o: OscillatorNode; g: GainNode }; private hornG?: GainNode; private wind?: GainNode; private cric?: GainNode; private rainG?: GainNode; private hum?: GainNode; private dogT = 25;
   volume = 0.7; muted = false; private stepT = 0; private birdT = 2; private t = 0;
   constructor() { const start = () => { this.init(); removeEventListener('pointerdown', start); removeEventListener('keydown', start); }; addEventListener('pointerdown', start); addEventListener('keydown', start); }
   get ready() { return !!this.ctx; }
@@ -17,6 +17,7 @@ export class AudioSys {
     // ambiance (bus filtré à l'intérieur)
     this.amb = ctx.createGain(); this.ambLP = ctx.createBiquadFilter(); this.ambLP.type = 'lowpass'; this.ambLP.frequency.value = 18000; this.amb.connect(this.ambLP).connect(this.master);
     const w = loopNoise(500); w.g.connect(this.amb); this.wind = w.g;
+    const rn = loopNoise(2600, 'highpass'); rn.g.connect(this.amb); this.rainG = rn.g; const hm = loopNoise(180); hm.g.connect(this.amb); this.hum = hm.g;   // pluie, rumeur de la circulation
     const o = ctx.createOscillator(); o.frequency.value = 4300; const trem = ctx.createGain(); trem.gain.value = 0; const lfo = ctx.createOscillator(); lfo.frequency.value = 7; const lg = ctx.createGain(); lg.gain.value = 0.5; lfo.connect(lg).connect(trem.gain); o.connect(trem); trem.connect(this.amb); o.start(); lfo.start(); this.cric = trem;
     // moteur
     const o1 = ctx.createOscillator(), o2 = ctx.createOscillator(); o1.type = 'sawtooth'; o2.type = 'square'; const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 600; const eg = ctx.createGain(); eg.gain.value = 0; o1.connect(lp); o2.connect(lp); lp.connect(eg).connect(this.master); o1.start(); o2.start(); this.eng = { o1, o2, g: eg, lp };
@@ -27,7 +28,7 @@ export class AudioSys {
   setVolume(v: number) { this.volume = clamp(v); this.apply(); } setMuted(m: boolean) { this.muted = m; this.apply(); }
   private apply() { if (this.master && this.ctx) this.master.gain.setTargetAtTime(this.muted ? 0 : this.volume, this.ctx.currentTime, 0.05); }
   private tone(f: number, dur: number, type: OscillatorType = 'sine', gain = 0.12, when = 0, slideTo?: number) { const c = this.ctx; if (!c || !this.master) return; const o = c.createOscillator(), g = c.createGain(); o.type = type; const t0 = c.currentTime + when; o.frequency.setValueAtTime(f, t0); if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, t0 + dur); g.gain.setValueAtTime(0, t0); g.gain.linearRampToValueAtTime(gain, t0 + 0.012); g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur); o.connect(g).connect(this.master); o.start(t0); o.stop(t0 + dur + 0.05); }
-  private burst(cut: number, dur: number, gain: number, type: BiquadFilterType = 'lowpass') { const c = this.ctx; if (!c || !this.master || !this.noise) return; const s = c.createBufferSource(); s.buffer = this.noise; const f = c.createBiquadFilter(); f.type = type; f.frequency.value = cut; const g = c.createGain(); g.gain.setValueAtTime(gain, c.currentTime); g.gain.exponentialRampToValueAtTime(0.0001, c.currentTime + dur); s.connect(f).connect(g).connect(this.master); s.start(c.currentTime, Math.random()); s.stop(c.currentTime + dur + 0.05); }
+  private burst(cut: number, dur: number, gain: number, type: BiquadFilterType = 'lowpass', when = 0) { const c = this.ctx; if (!c || !this.master || !this.noise) return; const t0 = c.currentTime + when; const s = c.createBufferSource(); s.buffer = this.noise; const f = c.createBiquadFilter(); f.type = type; f.frequency.value = cut; const g = c.createGain(); g.gain.setValueAtTime(0.0001, c.currentTime); g.gain.setValueAtTime(gain, t0); g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur); s.connect(f).connect(g).connect(this.master); s.start(t0, Math.random()); s.stop(t0 + dur + 0.05); }
   /** Effets ponctuels. v = intensité 0-1 pour les chocs. */
   sfx(name: string, v = 1) {
     if (!this.ctx) return; const k = clamp(v);
@@ -42,6 +43,8 @@ export class AudioSys {
       case 'alarm': for (let i = 0; i < 6; i++) this.tone(i % 2 ? 1500 : 1100, 0.14, 'square', 0.07, i * 0.16); break;
       case 'shot': this.burst(2400, 0.18, 0.6 * k + 0.1); this.tone(90, 0.16, 'sine', 0.35 * k, 0, 40); break;
       case 'horn': this.tone(420, 0.22, 'sawtooth', 0.05 * k + 0.01, 0, 420); this.tone(530, 0.22, 'sawtooth', 0.05 * k + 0.01, 0, 530); this.tone(420, 0.3, 'sawtooth', 0.05 * k + 0.01, 0.3, 420); this.tone(530, 0.3, 'sawtooth', 0.05 * k + 0.01, 0.3, 530); break;
+      case 'bell': { const f0 = 330; for (const [m, g] of [[1, 0.09], [2, 0.05], [2.4, 0.04], [3, 0.03], [4.2, 0.02]] as [number, number][]) this.tone(f0 * m, 3.2, 'sine', g * k); break; }   // cloche (partiels inharmoniques)
+      case 'voice': { const p = 160 + Math.random() * 140; this.tone(p, 0.22, 'sawtooth', 0.035 * k + 0.01, 0, p * 1.25); this.tone(p * 1.5, 0.18, 'triangle', 0.02 * k, 0.05, p * 1.1); break; }
       case 'ui': this.tone(660, 0.07, 'sine', 0.06); break;
     }
   }
@@ -55,6 +58,9 @@ export class AudioSys {
     this.hornG.gain.setTargetAtTime(s.horn && s.inCar ? 0.1 : 0, now, 0.02);
     this.ambLP.frequency.setTargetAtTime(s.inside ? 700 : 18000, now, 0.15); this.wind.gain.setTargetAtTime(0.025 + (s.inCar ? clamp(Math.abs(s.speed) / 40) * 0.05 : 0), now, 0.3); this.cric.gain.setTargetAtTime(s.night && !s.inside ? 0.006 : 0, now, 0.5);
     if (!s.inCar && !s.inside) { this.stepT -= dt; const iv = stepInterval(s.footSpeed); if (this.stepT <= 0 && iv < Infinity) { this.burst(500 + Math.random() * 300, 0.07, s.footSpeed > 3.6 ? 0.12 : 0.07); this.stepT = iv; } } else if (s.inside && s.footSpeed > 0.4) { this.stepT -= dt; if (this.stepT <= 0) { this.burst(900, 0.05, 0.06); this.stepT = stepInterval(s.footSpeed); } }
+    this.rainG?.gain.setTargetAtTime((s.rain ?? 0) * (s.inCar ? 0.12 : s.inside ? 0.05 : 0.09), now, 0.4); this.hum?.gain.setTargetAtTime(s.inside ? 0.004 : clamp((s.traffic ?? 0) / 12) * 0.05, now, 0.6);
+    // chiens qui aboient dans les jardins, plus souvent la nuit
+    if (!s.inside && (this.dogT -= dt) <= 0) { this.dogT = (s.night ? 14 : 30) + Math.random() * 40; const k = 0.4 + Math.random() * 0.6; for (let i = 0; i < 1 + Math.floor(Math.random() * 3); i++) { this.tone(420 + Math.random() * 120, 0.09, 'sawtooth', 0.025 * k, i * 0.32, 230); this.burst(900, 0.07, 0.05 * k, 'bandpass', i * 0.32); } }
     this.birdT -= dt; if (this.birdT <= 0) { this.birdT = 2 + Math.random() * 6; if (!s.night && !s.inside && !s.inCar) { const f0 = 2400 + Math.random() * 1600; this.tone(f0, 0.08, 'sine', 0.025); this.tone(f0 * 1.25, 0.1, 'sine', 0.025, 0.1); this.tone(f0 * 0.9, 0.08, 'sine', 0.02, 0.22); } }
   }
 }

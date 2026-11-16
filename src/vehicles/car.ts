@@ -11,7 +11,7 @@ export class Car {
   pos = new THREE.Vector3(); heading = 0; speed = 0; steer = 0; lateral = 0; yawRate = 0;
   private wheelMeshes: { m: THREE.Mesh; front: boolean }[] = []; private mats = vehicleMaterials();
   private geos: THREE.BufferGeometry[] = []; private orig: Float32Array[] = []; broken = new Set<number>(); cracked = false;
-  skill = 0; roll: { t: number; dur: number; turns: number; side: number } | null = null; flipped = false; lost = new Set<string>();
+  skill = 0; wet = 0; roll: { t: number; dur: number; turns: number; side: number } | null = null; flipped = false; lost = new Set<string>();
   private doorP?: THREE.Group; private doorCur = 0; private doorTgt = 0;
   headlights: THREE.SpotLight[] = []; beams: THREE.Mesh[] = []; lightsOn = false; slip = 0; braking = false; wheelRoll = 0; smokeAcc = 0;
   get length() { return this.spec.L; }
@@ -59,7 +59,7 @@ export class Car {
     if (c.handbrake) this.speed -= Math.sign(this.speed) * 14 * dt;
     const maxSteer = THREE.MathUtils.lerp(s.steer + 0.07, 0.14, Math.min(1, Math.abs(this.speed) / (s.maxSpeed * 0.8)));
     this.steer += (c.steer * maxSteer - this.steer) * Math.min(1, dt * 6);
-    const yaw = this.speed / s.wheelbase * Math.tan(this.steer); const grip = c.handbrake ? 0.8 : (s.grip + 1) * (1 + 0.04 * this.skill);
+    const yaw = this.speed / s.wheelbase * Math.tan(this.steer); const grip = c.handbrake ? 0.8 : (s.grip + 1) * (1 + 0.04 * this.skill) * (1 - 0.3 * this.wet);
     this.yawRate += (yaw - this.yawRate) * Math.min(1, dt * (c.handbrake ? 3 : 10)); this.heading += this.yawRate * dt;
     this.lateral -= this.lateral * Math.min(1, grip * dt);
     const fx = Math.sin(this.heading), fz = Math.cos(this.heading);
