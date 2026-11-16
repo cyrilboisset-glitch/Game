@@ -8,12 +8,14 @@ export interface Obstacle { x: number; z: number; h: number; speed: number; L: n
 
 /** Circulation : voitures qui suivent le graphe routier (sens uniques, limites, distance de sécurité, une voiture à la fois par carrefour). Elles n'existent qu'autour du joueur. */
 export class Traffic {
+  /** Rayon d'affichage des voitures : on n'en fait ni apparaître ni disparaître en deçà (pas d'apparition sous les yeux du joueur). */
+  hideR = 230;
   cars: TCar[] = []; private claims = new Map<number, { owner: number; until: number }>(); private clock = 0; private r: () => number; stats = { spawns: 0, attente: 0 };
   constructor(private graph: RoadGraph, private world: VehicleWorld, public count = 40, public patrols = 2, seed = 5) { let a = seed; this.r = () => (a = (a * 16807) % 2147483647) / 2147483647; }
 
   private spawn(fx: number, fz: number, patrol: boolean): boolean {
     for (let tries = 0; tries < 6; tries++) {
-      const a = this.graph.randomNodeInRing(fx, fz, patrol ? 160 : 130, patrol ? 380 : 300, this.r); if (a < 0) continue;
+      const r0 = Math.max(patrol ? 160 : 130, this.hideR * 1.15); const a = this.graph.randomNodeInRing(fx, fz, r0, r0 + 170, this.r); if (a < 0) continue;
       let b = this.graph.randomNodeInRing(this.graph.pts[a][0], this.graph.pts[a][1], 450, 1500, this.r); if (b < 0) b = this.graph.randomNodeInRing(this.graph.pts[a][0], this.graph.pts[a][1], 150, 2500, this.r); if (b < 0) continue;
       const nodes = this.graph.path(a, b, true); if (!nodes || nodes.length < 4) continue;
       const pl = this.graph.vehPolyline(nodes); const cum = [0]; for (let i = 0; i < pl.pts.length - 1; i++) cum.push(cum[i] + Math.hypot(pl.pts[i + 1][0] - pl.pts[i][0], pl.pts[i + 1][1] - pl.pts[i][1]));
@@ -24,6 +26,13 @@ export class Traffic {
       this.stats.spawns++; return true;
     }
     return false;
+  }
+  /** Prolonge l'itinéraire vers une nouvelle destination (la voiture continue sa route au lieu de s'évaporer). */
+  private extend(c: TCar) {
+    const from = c.nodes[c.nodes.length - 1]; const P = this.graph.pts[from]; let b = this.graph.randomNodeInRing(P[0], P[1], 300, 1500, this.r); if (b < 0) b = this.graph.randomNodeInRing(P[0], P[1], 100, 2500, this.r); if (b < 0) return false;
+    const nodes = this.graph.path(from, b, true); if (!nodes || nodes.length < 3) return false; const pl = this.graph.vehPolyline(nodes);
+    for (const q of pl.pts) { const l = c.pts[c.pts.length - 1]; c.pts.push(q); c.cum.push(c.cum[c.cum.length - 1] + Math.hypot(q[0] - l[0], q[1] - l[1])); }
+    c.lim.push(...pl.lim); c.nodes.push(...nodes.slice(1)); return true;
   }
   despawn(c: TCar) { this.world.remove(c.v); const i = this.cars.indexOf(c); if (i >= 0) this.cars.splice(i, 1); for (const [k, cl] of this.claims) if (cl.owner === c.v.id) this.claims.delete(k); }
   /** Retire une voiture de la circulation (vol de véhicule) sans la supprimer du monde. */
@@ -55,7 +64,11 @@ export class Traffic {
       for (const o of this.world.list) if (o.kind === 'gare' && Math.abs(o.x - v.x) < 14 && Math.abs(o.z - v.z) < 14) check(o.x, o.z, 0, SPECS[o.type].L * 0.8, o.h, 1.35);
       v.speed += Math.max(-8 * dt, Math.min(sp.accel * 0.3 * dt, target - v.speed)); if (v.speed < 0.3 && target < 0.5) c.blocked += dt; else c.blocked = 0;
       c.s += v.speed * dt; const p = pointAlong(c.pts, c.s); v.x = p.x; v.z = p.z; let dh = p.h - v.h; dh = Math.atan2(Math.sin(dh), Math.cos(dh)); v.h += dh * Math.min(1, dt * 6);
-      const far = Math.hypot(v.x - fx, v.z - fz) > 480; if (c.s >= c.cum[c.cum.length - 1] - 1 || far || c.blocked > 25) this.despawn(c);
+      const d = Math.hypot(v.x - fx, v.z - fz), far = d > Math.max(480, this.hideR + 200), seen = d < this.hideR + 20;
+      if (c.cum[c.cum.length - 1] - c.s < 40 && c.nodes.length < 400) this.extend(c);
+      // ne disparaît que hors de vue : trop loin, fin de route ou bloquée longtemps loin du joueur
+      if (far || (!seen && (c.s >= c.cum[c.cum.length - 1] - 1 || c.blocked > 25))) this.despawn(c);
+      else if (c.s >= c.cum[c.cum.length - 1] - 1) { c.s = c.cum[c.cum.length - 1] - 1; v.speed = 0; }
     }
   }
   private segIndex(c: TCar) { let lo = 0, hi = c.cum.length - 2; while (lo < hi) { const m = (lo + hi + 1) >> 1; if (c.cum[m] <= c.s) lo = m; else hi = m - 1; } return lo; }

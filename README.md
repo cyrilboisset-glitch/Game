@@ -7,7 +7,7 @@ Limites connues : pas de collisions, pas de trafic/PNJ, 400-700 draw calls (au-d
 
 ## Noyau de survie (phase 2)
 Contrôles PC : ZQSD marcher · Maj courir · E monter/descendre/acheter/briser la vitrine · F voler · 1 manger · 2 boire · R dormir · X se soulager · L phares · glisser souris : regarder.
-Mobile : joystick gauche, boutons à droite, glisser sur la moitié droite pour regarder.
+Mobile : joystick gauche pour bouger, second joystick (moitié droite, sous le pouce) pour orienter la caméra, boutons à droite.
 Besoins : faim, soif, énergie, vessie, santé (src/survival/needs.ts). « Recherche » : src/survival/heat.ts. Horloge : 20 min réelles = 24 h.
 Tests : `npm test` (logique pure) · `node tools/play.cjs <dossier>` (scénario Playwright, nécessite `npm run dev` et CHROME_BIN).
 Hypothèses : horaires par défaut des commerces quand opening_hours est absent (src/world/poi.ts) ; le jour 1 est un mercredi.
@@ -52,7 +52,7 @@ Mesures (tools/perf.cjs, Chromium headless, 412×915, rendu logiciel — les FPS
 Limites : aucun test sur un vrai téléphone (Xiaomi 14T) ; le son n'a pas pu être écouté dans l'environnement de développement (logique testée, rendu sonore non évalué) ; un seul modèle de corps pour les habitants ; véhicules et bâtiments stylisés.
 
 ## Contrôles (résumé)
-ZQSD/flèches : bouger · Maj : courir · 3 : trousse de soins · N/B : menus (receleur, planque) · C : s’accroupir · F : frapper · T : changer d’objet · V : capuche · Espace : frein à main · H : klaxon · E : monter/descendre/entrer/parler · 1 manger · 2 boire · R : dormir · X : besoin · L : phares · G : garage · B/N : concession · J : missions · O ou toucher : observer un habitant · M : son · F2 : réglages. Mobile : joystick + boutons, glisser pour regarder.
+ZQSD/flèches : bouger · Maj : courir · 3 : trousse de soins · N/B : menus (receleur, planque) · C : s’accroupir · F : frapper · T : changer d’objet · V : capuche · Espace : frein à main · H : klaxon · E : monter/descendre/entrer/parler · 1 manger · 2 boire · R : dormir · X : besoin · L : phares · G : garage · B/N : concession · J : missions · O ou toucher : observer un habitant · M : son · F2 : réglages. Mobile : joystick gauche + joystick caméra + boutons.
 
 ## Graphisme (passe 2)
 Horizon : massifs stylisés placés selon leurs directions réelles depuis Pontcharra (Belledonne à l'est/sud-est avec neige en altitude, Chartreuse et la falaise du Granier à l'ouest, Bauges au nord, vallée ouverte au NE et au SO), voile atmosphérique, nuages procéduraux animés.

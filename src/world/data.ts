@@ -1,5 +1,5 @@
 import type { Pt } from './geom';
-export interface Road { t: string; n: string; o: number; p: Pt[]; }
+export interface Road { t: string; n: string; o: number; p: Pt[]; j?: number; }   // j = 1 : anneau de rond-point
 /** u = usage IGN (r résidentiel, c commerce, i industriel, a agricole, x annexe, s sportif, g religieux), lg = logements, t = hauteur du toit (≈ 0 : plat), mw/mt = matériaux murs/toit : présents seulement après tools/import_ign.py ; rc = couleur du toit (photo aérienne, tools/import_ortho.py). */
 export interface Build { l: number; h: number; n: string; p: Pt[]; u?: string; lg?: number; t?: number; mw?: number; mt?: number; rc?: string; wc?: string; }
 export interface Water { a: number; p: Pt[]; }

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { loadWorld } from './world/data';
 import { loadPoi, Signs } from './world/poi';
 import { createMaterials, SOL_U } from './world/materials';
+import { pointAlong } from './roads/graph';
 import { sol } from './world/sol';
 import { Chunks } from './world/chunks';
 import { Environment } from './world/environment';
@@ -102,7 +103,7 @@ const quality = new AutoQuality(touchDev ? 'moyen' : 'eleve'); game.sfx = (n, v)
 function applyQuality(l: Level) {
   const p = levelParams(l); renderer.setPixelRatio(p.pixelRatio); renderer.setSize(innerWidth, innerHeight); post.setLevel(l === 'bas' ? 'aucun' : l === 'moyen' ? 'moyen' : 'eleve'); post.setSize(innerWidth, innerHeight);
   env.sun.castShadow = p.shadows; if (env.sun.shadow.mapSize.x !== p.shadowSize) { env.sun.shadow.mapSize.set(p.shadowSize, p.shadowSize); env.sun.shadow.map?.dispose(); (env.sun.shadow as any).map = null; }
-  if (!q.has('r')) VIEW = p.view; grass.enabled = l !== 'bas'; VEH_RANGE = p.vehicleRange; shadowRange = p.shadows ? p.shadowRange : 0; npcRender.limits = { pedMax: p.pedMax, avatars: p.avatars, range: p.npcRange }; traffic.count = p.trafficMax;
+  if (!q.has('r')) VIEW = p.view; grass.enabled = l !== 'bas'; VEH_RANGE = p.vehicleRange; shadowRange = p.shadows ? p.shadowRange : 0; npcRender.limits = { pedMax: p.pedMax, avatars: p.avatars, range: p.npcRange }; traffic.count = p.trafficMax; traffic.hideR = p.vehicleRange;
 }
 settings.onQuality = qv => { if (qv === 'auto') { quality.auto = true; } else { quality.auto = false; quality.set(qv); applyQuality(qv); } };
 settings.onVolume = v => audio.setVolume(v); settings.onMute = m => audio.setMuted(m); audio.setVolume(settings.volume); audio.setMuted(settings.muted);
@@ -111,7 +112,11 @@ let down: { x: number; y: number; t: number } | null = null;
 renderer.domElement.addEventListener('pointerdown', e => { down = { x: e.clientX, y: e.clientY, t: performance.now() }; });
 renderer.domElement.addEventListener('pointerup', e => { if (!down) return; const moved = Math.hypot(e.clientX - down.x, e.clientY - down.y), dt = performance.now() - down.t; down = null; if (moved < 9 && dt < 400 && !game.interior.inside) { const id = npcRender.pick(e.clientX, e.clientY, camera, innerWidth, innerHeight); if (id !== null) { game.observe(id); panel.show(true); } } });
 addEventListener('keydown', e => { if (e.code === 'KeyO' && !game.observed) { const v = npcRender.visible[0]; if (v) { game.observe(v.id); panel.show(true); } } });
-const statesArr: any[] = []; let statesMs = 0, rr = 0;
+const statesArr: any[] = []; let statesMs = 0, rr = 0, lastHour = game.clock.hour;
+/** Trajets rejoués à vitesse réelle près du joueur (piétons 1,45 m/s, voitures 9 m/s). `near` : habitants déjà vus de près (on reprend alors leur trajet suivant depuis le départ, pas au milieu). */
+const walkers = new Map<number, { key: string; path: [number, number][]; len: number; s: number; v: number; x: number; z: number; mode: 'marche' | 'conduit'; to: any; act: any; detail: string; done: boolean }>(); const near = new Set<number>();
+const npcIndex = new Map<number, number>(); npcs.forEach((n, i) => npcIndex.set(n.id, i));
+function startWalk(id: number, tr: NonNullable<ReturnType<typeof sim.trip>>, f: number) { const s0 = tr.len * f; const p = pointAlong(tr.path, s0); walkers.set(id, { key: tr.key, path: tr.path, len: tr.len, s: s0, v: tr.mode === 'conduit' ? 9 : tr.slow ? 1.15 : 1.45, x: p.x, z: p.z, mode: tr.mode, to: tr.to, act: tr.act, detail: tr.detail, done: false }); }
 /** États des habitants : tous recalculés en ~0,3 s, par tranches réparties sur les images (pas d'à-coup). Chemins détaillés (A*) seulement à moins de 330 m. */
 function updateStates(dt: number, fx: number, fz: number) {
   const t0 = performance.now(); const day = game.clock.day, hour = game.clock.hour; const N = npcs.length;
@@ -120,8 +125,22 @@ function updateStates(dt: number, fx: number, fz: number) {
     const i = rr; rr = (rr + 1) % N; const n = npcs[i];
     let s = sim.stateAt(n, day, hour, false); const sel = game.observed?.id === n.id; const prev = game.states.get(n.id) ?? s;
     if (sel || Math.hypot(prev.x - fx, prev.z - fz) < 330 || Math.hypot(s.x - fx, s.z - fz) < 330) s = sim.stateAt(n, day, hour, true);
+    // près du joueur, un trajet est rejoué à vitesse réelle (sinon, avec l'horloge accélérée ×72, les passants filent à 100 m/s et disparaissent)
+    const w = walkers.get(n.id);
+    if (w) { if (w.done) { if (s.kind === 'marche' || s.kind === 'conduit') { const tr = sim.trip(n, day, hour); if (tr && tr.key !== w.key) startWalk(n.id, tr, 0); } else if (s.place?.nom !== w.to.nom || Math.hypot(s.x - w.to.x, s.z - w.to.z) > 30) walkers.delete(n.id); } if (walkers.has(n.id)) continue; }
+    if ((s.kind === 'marche' || s.kind === 'conduit') && Math.hypot(s.x - fx, s.z - fz) < 300) { const tr = sim.trip(n, day, hour); if (tr) startWalk(n.id, tr, near.has(n.id) ? 0 : tr.f); }
+    if (Math.hypot(s.x - fx, s.z - fz) < 300) near.add(n.id); else near.delete(n.id);
     if (game.boarded === n.id || game.uw.evacuated.has(n.id)) s = { ...s, kind: 'absent' as const }; game.states.set(n.id, s); statesArr[i] = s;
   }
+  // avance des trajets rejoués, à chaque image
+  for (const [id, w] of walkers) {
+    let s: any;
+    if (Math.hypot(w.x - fx, w.z - fz) > 380) { walkers.delete(id); continue; }
+    if (!w.done) { w.s = Math.min(w.len, w.s + w.v * dt); const p = pointAlong(w.path, w.s); w.x = p.x; w.z = p.z; s = { id, x: p.x, z: p.z, h: p.h, kind: w.mode, act: w.act, speed: w.v, place: w.to, detail: w.detail }; if (w.s >= w.len) w.done = true; }
+    else { const inside = ['maison', 'travail', 'ecole', 'commerce', 'resto'].includes(w.to.kind); s = { id, x: w.to.x, z: w.to.z, h: 0, kind: inside ? 'dedans' : 'dehors', act: w.act, speed: 0, place: w.to, detail: w.to.nom }; }
+    if (game.boarded === id || game.uw.evacuated.has(id)) s = { ...s, kind: 'absent' }; game.states.set(id, s); const k = npcIndex.get(id); if (k !== undefined) statesArr[k] = s;
+  }
+  if (Math.abs(hour - lastHour) > 0.5 && Math.abs(hour - lastHour) < 23.5) walkers.clear(); lastHour = hour;   // saut dans le temps (sommeil, prison) : on repart de l'emploi du temps
   statesMs = statesMs * 0.9 + (performance.now() - t0) * 0.1;
 }
 document.getElementById('reset')?.addEventListener('click', () => { Save.reset(); location.reload(); });
@@ -130,6 +149,7 @@ const camPos = new THREE.Vector3(), camLook = new THREE.Vector3(); let snap = tr
 function placeCamera(dt: number) {
   if (game.observed && !game.interior.inside) { const st = game.states.get(game.observed.id); if (st) { const y = game.camYaw, p = 0.32, d = 5.4; const look = new THREE.Vector3(st.x, 1.3, st.z), tp = new THREE.Vector3(st.x - Math.sin(y) * Math.cos(p) * d, 1.5 + Math.sin(p) * d, st.z - Math.cos(y) * Math.cos(p) * d); if (snap) { camPos.copy(tp); camLook.copy(look); snap = false; } else { camPos.lerp(tp, 1 - Math.exp(-dt * 8)); camLook.lerp(look, 1 - Math.exp(-dt * 10)); } camera.position.copy(camPos); camera.lookAt(camLook); return; } }
   if (game.interior.inside) { const c = game.interior.camera(); camera.position.copy(c.pos); camera.lookAt(c.look); camPos.copy(c.pos); camLook.copy(c.look); snap = true; return; }
+  if (q.has('top')) { const hgt = +(q.get('top') || 70); camera.position.set(game.pos.x + hgt * 0.12, hgt, game.pos.z + hgt * 0.35); camera.lookAt(game.pos.x, 0, game.pos.z); return; }   // vue de dessus (outil de vérification)
   if (q.has('aerial')) { camera.position.set(game.pos.x - 120, 170, game.pos.z + 170); camera.lookAt(game.pos.x + 40, 0, game.pos.z - 20); return; }
   let tp: THREE.Vector3, look: THREE.Vector3;
   if (game.mode === 'car') {

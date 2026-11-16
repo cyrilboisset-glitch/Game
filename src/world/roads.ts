@@ -14,12 +14,18 @@ export interface RoadBuilders { marked: MeshBuilder; plain: MeshBuilder; paving:
 
 const key = (p: Pt) => `${Math.round(p[0] * 2)},${Math.round(p[1] * 2)}`;
 
-/** Index des jonctions : nœud → routes (largeur) qui le traversent. */
+/** Points des anneaux de ronds-points (rempli par junctions). */
+const RING: Pt[] = [];
+/** Passages piétons déjà placés (ordre des routes : déterministe). */
+const ZEBRAS: Pt[] = [];
+const pointAt = (p: Pt[], at: number): Pt => { const sg = slice(p, at, at + 0.01); return sg[0] ?? p[0]; };
+/** Index des jonctions : nœud → routes (largeur, nombre de branches qu'elles y ajoutent, rond-point) qui le traversent. */
 export function junctions(roads: Road[]) {
-  const m = new Map<string, { i: number; w: number }[]>();
+  const m = new Map<string, { i: number; w: number; arms: number; j: boolean; o: boolean; n: string }[]>(); RING.length = 0; ZEBRAS.length = 0;
   roads.forEach((r, i) => {
     const w = ROAD_W[r.t]; if (!w || r.t === 'service' || r.t === 'track') return;   // les entrées de garage ne coupent pas le trottoir
-    for (const p of r.p) { const k = key(p), l = m.get(k) ?? []; if (!l.some(e => e.i === i)) l.push({ i, w }); m.set(k, l); }
+    r.p.forEach((p, k) => { const kk = key(p), l = m.get(kk) ?? []; const end = k === 0 || k === r.p.length - 1; const closed = key(r.p[0]) === key(r.p[r.p.length - 1]);
+      const e = l.find(x => x.i === i); if (e) e.arms = 2; else l.push({ i, w, arms: end && !closed ? 1 : 2, j: !!r.j, o: !!r.o, n: r.n }); m.set(kk, l); if (r.j) RING.push(p); });
   });
   return m;
 }
@@ -74,15 +80,15 @@ function addSidewalk(B: MeshBuilder, p: Pt[], half: number, side: 1 | -1, y0: nu
 }
 
 /** Ajoute une route (déjà découpée par chunk). `cuts` = intervalles d'abscisse à exclure du trottoir. */
-export function addRoadPiece(B: RoadBuilders, r: Road, piece: Pt[], cuts: [number, number][], sBase: number) {
+export function addRoadPiece(B: RoadBuilders, r: Road, piece: Pt[], cuts: [number, number, number][], sBase: number) {
   if (PATH_TYPES.has(r.t)) { addStrip(B.paving, piece, 1.0, 0.04, 2); return; }
   const w = ROAD_W[r.t]; if (!w) return;
   const y = 0.03 + (RANK[r.t] ?? 0) * 0.012;
   addStrip(MARKED.has(r.t) ? B.marked : B.plain, piece, w / 2, y, 8, sBase);
   if (!SIDEWALK.has(r.t)) return;
   const total = length(piece);
-  // passages piétons (bandes blanches) à l'entrée des carrefours des grands axes
-  if (MARKED.has(r.t)) for (const [c0, c1] of cuts) for (const sAt of [c0 - sBase + 0.6, c1 - sBase - 3.1]) {
+  // passages piétons (bandes blanches) à l'entrée des vrais carrefours des grands axes ; jamais sur l'anneau d'un rond-point (seulement sur ses branches, en retrait)
+  if (MARKED.has(r.t) && !r.j) for (const [c0, c1, zb] of cuts) for (const [bit, sAt] of [[1, c0 - sBase + 0.6], [2, c1 - sBase - 3.1]] as const) { if (!(zb & bit)) continue;
     if (sAt < 0 || sAt + 2.5 > total) continue; const seg = slice(piece, sAt, sAt + 2.5); if (seg.length < 2) continue; const a = seg[0], b = seg[seg.length - 1]; const l = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1; const dx = (b[0] - a[0]) / l, dz = (b[1] - a[1]) / l, nx = -dz, nz = dx;
     for (let o = -w / 2 + 0.5; o <= w / 2 - 0.5; o += 1.0) { const P = (t: number, q: number) => [a[0] + dx * t + nx * q, y + 0.006, a[1] + dz * t + nz * q]; B.marks.planar([P(0, o + 0.25), P(2.5, o + 0.25), P(2.5, o - 0.25), P(0, o - 0.25)], [[0, 0], [1, 0], [1, 1], [0, 1]], null); }
   } let free: [number, number][] = [[0, total]];
@@ -98,12 +104,21 @@ export function addRoadPiece(B: RoadBuilders, r: Road, piece: Pt[], cuts: [numbe
 }
 
 /** Intervalles (abscisse curviligne) autour des jonctions où le trottoir est interrompu. */
-export function sidewalkCuts(r: Road, idx: number, J: Map<string, { i: number; w: number }[]>): [number, number][] {
-  const cuts: [number, number][] = []; let s = 0;
+export function sidewalkCuts(r: Road, idx: number, J: Map<string, { i: number; w: number; arms: number; j: boolean; o: boolean; n: string }[]>): [number, number, number][] {
+  const cuts: [number, number, number][] = []; let s = 0; const total = length(r.p);
   for (let i = 0; i < r.p.length; i++) {
     if (i) s += Math.hypot(r.p[i][0] - r.p[i - 1][0], r.p[i][1] - r.p[i - 1][1]);
-    const others = (J.get(key(r.p[i])) ?? []).filter(e => e.i !== idx);
-    if (others.length) { const rad = Math.max(...others.map(e => e.w)) / 2 + 2.2; cuts.push([s - rad, s + rad]); }
+    const all = J.get(key(r.p[i])) ?? []; const others = all.filter(e => e.i !== idx);
+    // vrai carrefour seulement : au moins 3 branches (une rue découpée en plusieurs tronçons OSM n'est pas un carrefour)
+    if (others.length && all.reduce((a, e) => a + e.arms, 0) >= 3) {
+      const rad = Math.max(...others.map(e => e.w)) / 2 + (others.some(e => e.j) ? 3.5 : 2.2); const [px, pz] = r.p[i];
+      // passage piéton : à l'entrée d'un rond-point, ou à un carrefour ordinaire ; pas là où une route se dédouble en deux chaussées, ni juste avant un rond-point
+      const ring = all.some(e => e.j) && !r.j, split = all.filter(e => e.o).length >= 2 && new Set(all.map(e => e.n)).size === 1, nearRing = RING.some(q => Math.abs(q[0] - px) < 45 && Math.abs(q[1] - pz) < 45);
+      let zb = 0;
+      if (MARKED.has(r.t) && !r.j && (ring || (!split && !nearRing))) for (const [bit, at] of [[1, s - rad + 1.85], [2, s + rad - 1.85]] as const) {
+        if (at < 0 || at > total) continue; const q = pointAt(r.p, at); if (ZEBRAS.some(z => Math.abs(z[0] - q[0]) < 10 && Math.abs(z[1] - q[1]) < 10 && Math.hypot(z[0] - q[0], z[1] - q[1]) < 10)) continue;   // pas deux passages à moins de 10 m
+        ZEBRAS.push(q); zb |= bit; }
+      cuts.push([s - rad, s + rad, zb]); }
   }
   return cuts;
 }

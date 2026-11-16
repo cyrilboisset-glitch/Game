@@ -2,7 +2,7 @@
 export class Input {
   x = 0; y = 0; run = false; handbrake = false; horn = false; lookDX = 0; lookDY = 0;
   /** Dernier glissement de caméra (ms) : la caméra se replace d'elle-même après un moment sans toucher. */
-  lookT = 0; onUi: (k: string) => void = () => {}; private root?: HTMLElement; private last = '';
+  lookT = 0; private lookStick = { x: 0, y: 0 }; private lastPoll = 0; onUi: (k: string) => void = () => {}; private root?: HTMLElement; private last = '';
   private keys = new Set<string>(); private pressed = new Set<string>(); private touchMove = { x: 0, y: 0 }; private touchBtn = new Set<string>();
   readonly touch = matchMedia('(pointer: coarse)').matches || new URLSearchParams(location.search).has('touch');
   constructor(el: HTMLElement) {
@@ -15,6 +15,9 @@ export class Input {
     if (this.touch) this.buildTouch();
   }
   poll() {
+    // joystick caméra : vitesse de rotation proportionnelle à l'inclinaison (courbe douce pour viser finement)
+    const now = performance.now(), pdt = Math.min(0.1, Math.max(0, (now - (this.lastPoll || now)) / 1000)); this.lastPoll = now; const ls = this.lookStick;
+    if (ls.x || ls.y) { const cx = Math.sign(ls.x) * Math.abs(ls.x) ** 1.6, cy = Math.sign(ls.y) * Math.abs(ls.y) ** 1.6; this.lookDX += cx * 2.8 / 0.0055 * pdt; this.lookDY += cy * 1.3 / 0.004 * pdt; this.lookT = now; }
     const k = (...c: string[]) => c.some(x => this.keys.has(x));
     this.x = THREE_clamp((k('KeyD', 'ArrowRight') ? 1 : 0) - (k('KeyA', 'KeyQ', 'ArrowLeft') ? 1 : 0) + this.touchMove.x);
     this.y = THREE_clamp((k('KeyW', 'KeyZ', 'ArrowUp') ? 1 : 0) - (k('KeyS', 'ArrowDown') ? 1 : 0) + this.touchMove.y + (this.touchBtn.has('gas') ? 1 : 0) - (this.touchBtn.has('rev') ? 1 : 0));
@@ -39,7 +42,7 @@ export class Input {
   private buildTouch() {
     const root = document.createElement('div'); root.className = 'ui'; root.id = 'touch'; document.body.appendChild(root);
     // pad droit : A = action principale (étiquette selon le contexte), B = frapper/tirer, C = courir/freiner, D = accroupi/klaxon ; rangée de boutons contextuels ; menu ☰ pour le reste
-    root.innerHTML = `<div id="joy"><div id="knob"></div></div>
+    root.innerHTML = `<div id="joy"><div id="knob"></div></div><div id="joy2"><div id="knob2"></div></div>
       <div id="pad"><button class="rb" id="bA" data-a="action">E</button><button class="rb" id="bB" data-a="hit">Frapper</button><button class="rb" id="bC" data-h="run">Courir</button><button class="rb" id="bD" data-a="crouch">Accroupi</button><button class="rb" id="bM" data-m="1">☰</button></div>
       <div id="chips"></div>
       <div id="tpanel" style="display:none">${MENU.map(([a, l, h]) => `<button ${h ? 'data-h' : 'data-a'}="${a}" data-close="1">${l}</button>`).join('')}<button data-ui="fullscreen" data-close="1">Plein écran</button><button data-ui="gear" data-close="1">Réglages</button><button data-ui="reset" data-close="1">Nouvelle partie</button><button data-close="1" class="x" style="grid-column:auto">Fermer</button></div>`;
@@ -58,10 +61,13 @@ export class Input {
       if (b.dataset.m) this.panel(true); else if (b.dataset.close) setTimeout(() => this.panel(false), 60); if (navigator.vibrate) navigator.vibrate(12); });
     const up = (e: Event) => { const b = btnOf(e); if (!b) return; const h = b.dataset.h; if (h && !b.dataset.close) this.touchBtn.delete(h); b.classList.remove('down'); if (h && b.dataset.close) setTimeout(() => this.touchBtn.delete(h), 400); };
     root.addEventListener('pointerup', up); root.addEventListener('pointerout', up); root.addEventListener('pointercancel', up);
-    let look = -1, lx = 0, ly = 0;   // regarder : glisser sur la moitié droite de l'écran
-    addEventListener('pointerdown', e => { if (e.pointerType === 'touch' && e.clientX > innerWidth * 0.45 && !(e.target as HTMLElement).closest('.ui')) { look = e.pointerId; lx = e.clientX; ly = e.clientY; this.lookT = performance.now(); } });
-    addEventListener('pointermove', e => { if (e.pointerId === look) { this.lookT = performance.now(); this.lookDX += e.clientX - lx; this.lookDY += e.clientY - ly; lx = e.clientX; ly = e.clientY; } });
-    addEventListener('pointerup', e => { if (e.pointerId === look) look = -1; });
+    // second joystick (caméra) : il se place là où le pouce droit se pose (moitié droite, hors boutons) ; l'inclinaison fait tourner la caméra en continu
+    const joy2 = root.querySelector('#joy2') as HTMLElement, knob2 = root.querySelector('#knob2') as HTMLElement; let id2 = -1;
+    const upd2 = (e: PointerEvent) => { const r = joy2.getBoundingClientRect(); let dx = (e.clientX - (r.left + r.width / 2)) / (r.width / 2), dy = (e.clientY - (r.top + r.height / 2)) / (r.height / 2); const l = Math.hypot(dx, dy); if (l > 1) { dx /= l; dy /= l; } this.lookStick = { x: dx, y: dy }; knob2.style.transform = `translate(${dx * 38}px,${dy * 38}px)`; this.lookT = performance.now(); };
+    addEventListener('pointerdown', e => { const t = e.target as HTMLElement; if (id2 >= 0 || e.clientX <= innerWidth * 0.45 || t.closest('button, .ui #pad, #phone, #tpanel, #settings, #missions, #observe, #phoneBtn, #chips')) return;
+      id2 = e.pointerId; joy2.style.left = `${e.clientX - 65}px`; joy2.style.top = `${e.clientY - 65}px`; joy2.style.right = 'auto'; joy2.style.bottom = 'auto'; joy2.classList.add('on'); upd2(e); }, { capture: true });
+    addEventListener('pointermove', e => { if (e.pointerId === id2) upd2(e); });
+    const end2 = (e: PointerEvent) => { if (e.pointerId !== id2) return; id2 = -1; this.lookStick = { x: 0, y: 0 }; knob2.style.transform = ''; joy2.style.left = ''; joy2.style.top = ''; joy2.style.right = ''; joy2.style.bottom = ''; joy2.classList.remove('on'); }; addEventListener('pointerup', end2); addEventListener('pointercancel', end2);
   }
 }
 const THREE_clamp = (v: number) => Math.max(-1, Math.min(1, v));

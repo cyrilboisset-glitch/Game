@@ -32,7 +32,9 @@ def main(src, out):
             lv = int(num(tags.get("building:levels", 0)))
             res["builds"].append({"l": lv, "h": num(tags.get("height", 0)), "n": tags.get("name", ""), "p": p})
         elif "highway" in tags:
-            res["roads"].append({"t": tags["highway"], "n": tags.get("name", ""), "o": 1 if tags.get("oneway") == "yes" else 0, "p": p})
+            rd = {"t": tags["highway"], "n": tags.get("name", ""), "o": 1 if tags.get("oneway") == "yes" or tags.get("junction") == "roundabout" else 0, "p": p}
+            if tags.get("junction") in ("roundabout", "circular"): rd["j"] = 1
+            res["roads"].append(rd)
         elif tags.get("railway") in ("rail", "light_rail"):
             res["rails"].append(p)
         elif tags.get("natural") == "water" or tags.get("waterway") in ("river", "stream", "canal", "riverbank"):

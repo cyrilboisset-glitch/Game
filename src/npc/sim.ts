@@ -55,6 +55,13 @@ export class NpcSim {
     if (path) { const p = pointAlong(path, f * sg.len); return { id: n.id, x: p.x, z: p.z, h: p.h, kind: sg.mode!, act: sg.act, speed: sg.len / ((sg.t1 - sg.t0) * 3600), place: to, detail }; }
     return { id: n.id, x: from.x + (to.x - from.x) * f, z: from.z + (to.z - from.z) * f, h: Math.atan2(to.x - from.x, to.z - from.z), kind: sg.mode!, act: sg.act, speed: sg.len / ((sg.t1 - sg.t0) * 3600), place: to, detail };
   }
+  /** Trajet en cours (chemin détaillé) : sert à le rejouer à vitesse réelle près du joueur. */
+  trip(n: Npc, day: number, hour: number): { key: string; path: Pt[]; len: number; f: number; mode: 'marche' | 'conduit'; to: Place; act: Act; detail: string; slow: boolean } | null {
+    const segs = this.timeline(n, day); let sg = segs[segs.length - 1]; for (const x of segs) if (hour < x.t1) { sg = x; break; }
+    if (sg.type !== 'travel') return null; const path = this.ensurePath(sg); if (!path) return null;
+    const f = Math.min(1, Math.max(0, (hour - sg.t0) / Math.max(1e-6, sg.t1 - sg.t0)));
+    return { key: `${day}:${sg.t0.toFixed(4)}`, path, len: sg.len, f, mode: sg.mode!, to: sg.to!, act: sg.act, detail: `en route vers ${sg.to!.nom} (${sg.mode === 'conduit' ? 'en voiture' : 'à pied'})`, slow: n.age > 70 };
+  }
   /** Journal d'activité du jour jusqu'à l'heure courante (plus récent en dernier). */
   journal(n: Npc, day: number, hour: number, max = 9): string[] {
     const out: string[] = []; const segs = this.timeline(n, day); let prevAct: Act | null = null;
